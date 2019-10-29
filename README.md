@@ -6,16 +6,16 @@ A solution algorithm initialization program for use in a research project of min
 
 The main program looks for input files in a local `data/` folder. The following data files should be included in the this folder:
 
-* `arc_data.txt`
-* `assignment_data.txt`
-* `node_data.txt`
-* `objective_data.txt`
-* `od_data.txt`
-* `operator_cost_data.txt`
-* `problem_data.txt`
-* `transit_data.txt`
-* `user_cost_data.txt`
-* `vehicle_data.txt`
+* [`arc_data.txt`](#arc_datatxt)
+* [`assignment_data.txt`](#assignment_datatxt)
+* [`node_data.txt`](#node_datatxt)
+* [`objective_data.txt`](#objective_datatxt)
+* [`od_data.txt`](#od_datatxt)
+* [`operator_cost_data.txt`](#operator_cost_datatxt)
+* [`problem_data.txt`](#problem_datatxt)
+* [`transit_data.txt`](#transit_datatxt)
+* [`user_cost_data.txt`](#user_cost_datatxt)
+* [`vehicle_data.txt`](#vehicle_datatxt)
 
 The contents of these files will be explained below. Most include IDs for each of their elements. For the purposes of our solution algorithm, these are assumed to consecutive integers beginning at `0`, and this is how they will be treated for the purposes of array placement.
 
@@ -120,8 +120,8 @@ Contains the following columns:
 * `LB`: Lower bound of allowable fleet size.
 * `UB`: Upper bound of allowable fleet size.
 * `Fare`: Boarding fare.
-* `Frequency`: Initial line frequency, measured only during its active portion of the day. Relatively unimportant since it is recalculated each iteration for the current solution. The equation is: `frequency = (fleet size) / (circuit time)`.
-* `Capacity`: Initial line capacity, measured as a total number of passengers that can be transported per day. Relatively unimportant since it is recalculated each iteration for the current solution. The equation is: `capacity = frequency (daily time horizon) (active fraction of day) (vehicle type seating capacity)`.
+* `Frequency`: Initial line frequency, measured only during its active portion of the day. Relatively unimportant since it is recalculated each iteration for the current solution.
+* `Capacity`: Initial line capacity, measured as a total number of passengers that can be transported per day. Relatively unimportant since it is recalculated each iteration for the current solution.
 
 ## `user_cost_data.txt`
 
