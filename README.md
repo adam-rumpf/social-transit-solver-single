@@ -75,7 +75,6 @@ Information related to defining the objective function and related accessibility
 Contains the following rows:
 * `Elements`: Number of parameters listed on the following rows. Currently set to `3`.
 * `Lowest`: Number of lowest-metric population centers to take for the objective function.
-* `FCA_Cutoff`: Time cutoff to define catchment areas for the 2SFCA metric.
 * `Gravity_Falloff`: Exponent used to define distance falloff in gravity metric. This should be a positive value, and will be treated as negative in the program. A larger value means faster falloff.
 
 ## `od_data.txt`

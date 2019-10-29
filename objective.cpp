@@ -41,8 +41,6 @@ Objective::Objective(string obj_file_name, Network * net_in)
 			if (count == 2)
 				lowest_metrics = stoi(value);
 			if (count == 3)
-				catchment_cutoff = stod(value);
-			if (count == 4)
 				gravity_exponent = stod(value);
 		}
 

@@ -35,7 +35,6 @@ struct Objective
 	// Public attributes
 	Network * Net; // pointer to the main transit network object
 	int lowest_metrics = 1; // size of lowest metric set to use for calculating the objective value
-	double catchment_cutoff = INFINITY; // time cutoff (minutes) to define 2SFCA catchment areas
 	double gravity_exponent = 1.0; // gravity metric distance falloff exponent (will be made negative for calculations)
 	int pop_size; // number of population nodes
 	int fac_size; // number of facility nodes
