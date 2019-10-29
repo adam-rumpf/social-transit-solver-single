@@ -1,10 +1,21 @@
 # social-transit-solver-single
 
-A solution algorithm initialization program for use in a research project of mine dealing with a public transit design model with social access objectives. This produces the initial objective and constraint function values, and is not part of the main solution search loop.
+A solution algorithm initialization program for use in a research project of mine dealing with a public transit design model with social access objectives. This produces the initial objective and constraint function values and is not part of the main solution search loop.
 
-# Data Folder
+The main purpose of this program is to calculate the constraint and objective values of the initial solution vector for use in the main solver's search algorithm, as well as a few additional metrics for use in comparing the initial network to the final network. The network, objective, and constraint modules included in this program should be identical to those used in the main solver.
 
-The main program looks for input files in a local `data/` folder. The following data files should be included in the this folder:
+I would not expect this program to be of much use to anyone outside of our research group, but it is provided here for anyone interested.
+
+## Output Folder
+
+This program writes output files to a local `output/` folder. The following files are produced:
+
+* `gravity_metrics.txt`: A full listing of the gravity access metrics of all population centers for the initial solution vector. This is meant for comparing the initial and final results on a center-by-center basis.
+* `initial_solution_log.txt`: An initial version of the solution log file for the main solver. Formatted correctly for the main solver, and contains a single row which logs the initial solution along with its constriant and objective values.
+
+## Data Folder
+
+This program reads input files from a local `data/` folder. The following data files should be included in this folder:
 
 * [`arc_data.txt`](#arc_datatxt)
 * [`assignment_data.txt`](#assignment_datatxt)
@@ -17,7 +28,7 @@ The main program looks for input files in a local `data/` folder. The following 
 * [`user_cost_data.txt`](#user_cost_datatxt)
 * [`vehicle_data.txt`](#vehicle_datatxt)
 
-The contents of these files will be explained below. Most include IDs for each of their elements. For the purposes of our solution algorithm, these are assumed to consecutive integers beginning at `0`, and this is how they will be treated for the purposes of array placement.
+The contents of these files will be explained below. Most include IDs for each of their elements. For the purposes of our solution algorithm these are assumed to consecutive integers beginning at `0`, and this is how they will be treated for the purposes of array placement.
 
 Unless otherwise specified, the following units are used:
 
@@ -25,11 +36,12 @@ Unless otherwise specified, the following units are used:
 * distance = miles
 * time = minutes
 
-## `arc_data.txt`
+### `arc_data.txt`
 
 Information related to all arcs.
 
 Contains the following columns:
+
 * `ID`: Unique identifying number.
 * `Type`: Arc type ID. The types in use are:
   * `0`: line arc
@@ -42,22 +54,24 @@ Contains the following columns:
 * `Head`: Node ID of the arc's head.
 * `Time`: Constant part of travel time of arc. Boarding arcs, whose travel time is based on the line frequency, have a listed time of `0`.
 
-## `assignment_data.txt`
+### `assignment_data.txt`
 
 Information related to the Spiess and Florian assignment model.
 
 Contains the following rows:
+
 * `Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
 * `Cutoff`: Iteration cutoff for the Frank-Wolfe algorithm.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `2`.
 * `alpha`: Alpha parameter of the conical congestion function.
 * `beta`: Beta parameter of the conical congestion function. By definition it should equal `(2 alpha - 1)/(2 alpha - 2)`, and is included here only for convenience.
 
-## `node_data.txt`
+### `node_data.txt`
 
 Information related to all nodes.
 
 Contains the following columns:
+
 * `ID`: Unique identifying number. Used to reference specific nodes in the other data files.
 * `Name`: Name of the node. Most stops are simply called "Stop" followed by their ID number. Boarding nodes also append the name of their line. Population centers and primary care facilities use their real names.
 * `Type`: Node type ID. The types in use are:
@@ -68,49 +82,54 @@ Contains the following columns:
 * `Line`: Line ID of a boarding node, and `-1` otherwise.
 * `Value`: Population of a population center, facility weight of a primary care facility, and `-1` otherwise.
 
-## `objective_data.txt`
+### `objective_data.txt`
 
 Information related to defining the objective function and related accessibility metrics.
 
 Contains the following rows:
-* `Elements`: Number of parameters listed on the following rows. Currently set to `4`.
+
+* `Elements`: Number of parameters listed on the following rows. Currently set to `3`.
 * `Lowest`: Number of lowest-metric population centers to take for the objective function.
 * `Gravity_Falloff`: Exponent used to define distance falloff in gravity metric. This should be a positive value, and will be treated as negative in the program. A larger value means faster falloff.
 * `Multiplier`: Factor by which to multiply the objective value in the solution log. This should be chosen to compensate for very small decimal values that would otherwise risk truncation error.
 
-## `od_data.txt`
+### `od_data.txt`
 
 Origin/destination travel demands. Only nonzero demands are meant to be included.
 
 Contains the following columns:
+
 * `ID`: Unique identifying number.
 * `Origin`: Node ID of origin.
 * `Destination`: Node ID of destination.
 * `Volume`: Number of people wishing to travel from the origin to the destination.
 
-## `operator_cost_data.txt`
+### `operator_cost_data.txt`
 
 Information related to defining the operator cost function.
 
 Contains the following rows:
+
 * `Initial`: Operator cost of the initial solution. Used for defining the allowable relative increase bounds. Note that this is not calculated automatically during preprocessing, and must be filled in by hand by using the single-run model.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `2`.
 * `Operating_Cost`: Weight of the vehicle operating costs.
 * `Fares`: Fare collected from each boarding.
 
-## `problem_data.txt`
+### `problem_data.txt`
 
 Miscellaneous data required to define the problem.
 
 Contains the following rows:
+
 * `Elements`: Number of parameters listed on the following rows. Currently set to `1`.
 * `Horizon`: Total daily time horizon.
 
-## `transit_data.txt`
+### `transit_data.txt`
 
 Information related to each transit line. This includes a variety of fields directly related to the solution vector, such as the initial number of vehicles on each line (which constitutes the initial solution vector).
 
 Contains the following columns:
+
 * ID: Unique identifying number. This should indicate its position in the solution vector. Also used for line-specific references in the other data files.
 * `Name`: Name of the line listed in the GTFS files.
 * `Type`: Vehicle type ID. Matches one of the IDs listed in the vehicle data file.
@@ -123,22 +142,24 @@ Contains the following columns:
 * `Frequency`: Initial line frequency, measured only during its active portion of the day. Relatively unimportant since it is recalculated each iteration for the current solution.
 * `Capacity`: Initial line capacity, measured as a total number of passengers that can be transported per day. Relatively unimportant since it is recalculated each iteration for the current solution.
 
-## `user_cost_data.txt`
+### `user_cost_data.txt`
 
 Information related to defining the user cost function.
 
 Contains the following rows:
+
 * `Initial`: User cost of the initial solution. Used for defining the allowable relative increase bounds. Note that this is not calculated automatically during preprocessing, and must be filled in by hand by using the single-run model.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `3`.
 * `Riding`: Weight of in-vehicle riding time.
 * `Walking`: Weight of walking time.
 * `Waiting`: Weight of waiting time.
 
-## `vehicle_data.txt`
+### `vehicle_data.txt`
 
 Information related to each vehicle. Each route has a specified vehicle type, and only routes with the same vehicle type may exchange vehicles during the search algorithm.
 
 Contains the following columns:
+
 * `Type`: Vehicle type ID. Referenced in the transit data file to specify the vehicle type of each route.
 * `Name`: Name of the vehicle.
 * `UB`: Maximum number of this type of vehicle allowed in the network.

@@ -91,13 +91,16 @@ vector<double> Objective::all_metrics(const vector<int> &fleet)
 		distance[i].resize(fac_size);
 
 	// Calculate distances row-by-row using single-source Dijkstra in parallel over all sources
-	cout << "Calculating distances in parallel: ";
+	cout << "Calculating distances in parallel:\n|";
+	for (int i = 0; i < pop_size; i++)
+		cout << '-'; // "length" of "progress bar"
+	cout << "|\n|";
 	parallel_for(0, pop_size, [&](int i)
 	{
-		cout << i << ' ';
+		cout << '*'; // shows progress
 		population_to_all_facilities(i, distance[i]);
 	});
-	cout << endl;
+	cout << '|' << endl;
 
 	// Calculate facility metrics
 	cout << "Calculating facility metrics." << endl;

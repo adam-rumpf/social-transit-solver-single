@@ -1,7 +1,7 @@
 #include "constraints.h"
 
 /**
-Constraint object constructor that loads objective file input and sets a network object pointer.
+Constraint object constructor that loads constraint file input and sets a network object pointer.
 
 Requires the names of the user cost file, operator cost file, assignment model file, and a network object pointer.
 */
