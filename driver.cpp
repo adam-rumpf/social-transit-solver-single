@@ -20,10 +20,11 @@ To Do:
 // Define input file names
 #define NODE_FILE "data/node_data.txt"
 #define ARC_FILE "data/arc_data.txt"
-#define OD_FILE "data/od_data_skinny.txt" ///////////////////////////////////// CHANGE THIS LATER
+#define OD_FILE "data/od_data.txt"
 #define TRANSIT_FILE "data/transit_data.txt"
 #define VEHICLE_FILE "data/vehicle_data.txt"
 #define OBJECTIVE_FILE "data/objective_data.txt"
+#define PROBLEM_FILE "data/problem_data.txt"
 #define USER_COST_FILE "data/user_cost_data.txt"
 #define OPERATOR_COST_FILE "data/operator_cost_data.txt"
 #define ASSIGNMENT_FILE "data/assignment_data.txt"
@@ -54,10 +55,10 @@ int main()
 	vector<int> fleets = read_fleets(TRANSIT_FILE);
 
 	// Initialize network object
-	Network * Net = new Network(NODE_FILE, ARC_FILE, OD_FILE, TRANSIT_FILE, VEHICLE_FILE);
+	Network * Net = new Network(NODE_FILE, ARC_FILE, OD_FILE, TRANSIT_FILE, VEHICLE_FILE, PROBLEM_FILE);
 
 	// Use Objective object to calculate initial objective value and accessibility metrics
-	/*Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
+	Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
 	
 	vector<double> metrics = Obj->all_metrics(fleets); // calculate all metrics
 	record_metrics(metrics); // write metrics to file
@@ -65,7 +66,7 @@ int main()
 	initial_objective = Obj->calculate(fleets); // calculate initial objective value
 	obj_time = (1.0*clock() - timer) / CLOCKS_PER_SEC;
 	cout << "\nObjective calculation took " << obj_time << " seconds." << endl;
-	cout << "Initial objective value: " << initial_objective << endl;*/
+	cout << "Initial objective value: " << initial_objective << endl;
 
 	// Use Constraint object to calculate initial constraint function values
 	Constraint * Con = new Constraint(USER_COST_FILE, OPERATOR_COST_FILE, ASSIGNMENT_FILE, Net);
@@ -188,7 +189,7 @@ void solution_log(vector<int> &sol, vector<double> &row)
 	cout << "Successfully recorded solution!" << endl;
 }
 
-/// Converts a solution vector to a string by simply concatenating its digits.
+/// Converts a solution vector to a string by simply concatenating its digits separated by underscores.
 string solution_string(vector<int> &sol)
 {
 	string out = "";

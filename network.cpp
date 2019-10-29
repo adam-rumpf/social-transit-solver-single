@@ -9,11 +9,36 @@ Requires the names of the following input data files, in order:
 	OD data
 	transit data
 	vehicle data
+	problem data
 
 Reads the contents of these files and uses them to fill its own line, node, and arc lists, while also initializing those objects.
 */
-Network::Network(string node_file_name, string arc_file_name, string od_file_name, string transit_file_name, string vehicle_file_name)
+Network::Network(string node_file_name, string arc_file_name, string od_file_name, string transit_file_name, string vehicle_file_name, string problem_file_name)
 {
+	// Read problem file to get time horizon
+	double horizon = 1440.0; // default to whole 24 hours
+	cout << "Reading problem data..." << endl;
+	ifstream problem_file;
+	problem_file.open(problem_file_name);
+	if (problem_file.is_open())
+	{
+		string line, piece; // whole line and line element being read
+		getline(problem_file, line); // skip comment 
+		getline(problem_file, line); // skip elements line
+		getline(problem_file, line); // get time horizon line
+
+		stringstream stream(line);
+		getline(stream, piece, '\t'); // Name
+		getline(stream, piece, '\t'); // Horizon
+		horizon = stod(piece); // get time horizon value
+
+		cout << "Reading time horizon as " << horizon << " minutes." << endl;
+
+		problem_file.close();
+	}
+	else
+		cout << "Problem file failed to open." << endl;
+
 	// Read node file and create node lists
 	cout << "Reading node data..." << endl;
 	ifstream node_file;
@@ -141,7 +166,7 @@ Network::Network(string node_file_name, string arc_file_name, string od_file_nam
 			getline(stream, piece, '\t'); // Capacity
 
 			// Create a line object and add it to the list
-			Line * new_line = new Line(circuit_time, vehicle_seating[vehicle_type], day_fraction);
+			Line * new_line = new Line(circuit_time, vehicle_seating[vehicle_type], day_fraction, horizon);
 			lines.push_back(new_line);
 		}
 
@@ -286,12 +311,13 @@ Arc::Arc(int id_in, Node * tail_in, Node * head_in, double cost_in, int line_in,
 		boarding = false;
 }
 
-/// Line constructor specifies its circuit time, seating capacity, and active fraction of day.
-Line::Line(double circuit_in, double seating_in, double fraction_in)
+/// Line constructor specifies its circuit time, seating capacity, active fraction of day, and daily time horizon.
+Line::Line(double circuit_in, double seating_in, double fraction_in, double horizon_in)
 {
 	circuit = circuit_in;
 	seating = seating_in;
 	day_fraction = fraction_in;
+	day_horizon = horizon_in;
 }
 
 /// Returns line frequency resulting from a given fleet size.
@@ -312,5 +338,5 @@ double Line::headway(int fleet)
 /// Returns line capacity resulting from a given fleet size.
 double Line::capacity(int fleet)
 {
-	return frequency(fleet) * day_fraction * MINUTES_PER_DAY * seating;
+	return frequency(fleet) * day_fraction * day_horizon * seating;
 }

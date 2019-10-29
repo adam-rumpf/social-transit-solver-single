@@ -24,8 +24,6 @@ Includes a Network, Arc, Node, and Line class. Objects from these classes are bu
 #define WALKING_ARC 3
 #define ACCESS_ARC 4
 
-#define MINUTES_PER_DAY 1440
-
 using namespace std;
 
 // Structure declarations
@@ -57,7 +55,7 @@ struct Network
 	vector<Arc *> access_arcs; // pointers to access network walking arcs
 
 	// Public methods
-	Network(string, string, string, string, string); // constructor uses input data file names to automatically build the network
+	Network(string, string, string, string, string, string); // constructor uses input data file names to automatically build the network
 };
 
 /**
@@ -113,10 +111,11 @@ struct Line
 	vector<Arc *> in_vehicle; // pointers to associated line arcs (in-vehicle travel)
 	double circuit; // time required for a vehicle to complete one circuit (minutes)
 	double seating; // seating capacity of each vehicle used by this line
-	double day_fraction; // fraction of day during which the line operates (1.0 indicates 24 hours)
+	double day_fraction; // fraction of day during which the line operates (1.0 indicates full day)
+	double day_horizon; // daily time horizon (minutes)
 
 	// Public methods
-	Line(double, double, double); // constructor sets circuit time, seating capacity, and active fraction of day
+	Line(double, double, double, double); // constructor sets circuit time, seating capacity, active fraction of day, and daily time horizon
 	double frequency(int); // returns frequency resulting from a given fleet size
 	double headway(int); // returns average headway resulting from a given fleet size
 	double capacity(int); // returns capacity resulting from a given fleet size
