@@ -73,9 +73,10 @@ Contains the following columns:
 Information related to defining the objective function and related accessibility metrics.
 
 Contains the following rows:
-* `Elements`: Number of parameters listed on the following rows. Currently set to `3`.
+* `Elements`: Number of parameters listed on the following rows. Currently set to `4`.
 * `Lowest`: Number of lowest-metric population centers to take for the objective function.
 * `Gravity_Falloff`: Exponent used to define distance falloff in gravity metric. This should be a positive value, and will be treated as negative in the program. A larger value means faster falloff.
+* `Multiplier`: Factor by which to multiply the objective value in the solution log. This should be chosen to compensate for very small decimal values that would otherwise risk truncation error.
 
 ## `od_data.txt`
 

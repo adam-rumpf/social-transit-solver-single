@@ -42,6 +42,8 @@ Objective::Objective(string obj_file_name, Network * net_in)
 				lowest_metrics = stoi(value);
 			if (count == 3)
 				gravity_exponent = stod(value);
+			if (count == 4)
+				multiplier = stod(value);
 		}
 
 		obj_file.close();
@@ -66,7 +68,7 @@ double Objective::calculate(const vector<int> &fleet)
 	for (int i = 0; i < lowest_metrics; i++)
 		sum += metrics[i];
 
-	return -sum; // return negative sum
+	return -multiplier * sum; // return negative sum times multiplier
 }
 
 /**
