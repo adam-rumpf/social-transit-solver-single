@@ -160,6 +160,8 @@ void record_metrics(vector<double> &metrics)
 		// Write all metrics
 		for (int i = 0; i < metrics.size(); i++)
 			out_file << i + 1 << '\t' << metrics[i] << endl;
+
+		out_file.close();
 	}
 	else
 		cout << "Metric file failed to open." << endl;
@@ -182,6 +184,8 @@ void solution_log(vector<int> &sol, vector<double> &row)
 		for (int i = 0; i < row.size(); i++)
 			log_file << row[i] << '\t';
 		log_file << endl;
+
+		log_file.close();
 	}
 	else
 		cout << "Solution log file failed to open." << endl;
