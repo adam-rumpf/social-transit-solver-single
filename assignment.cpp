@@ -31,7 +31,7 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 
 	///////////////////////////////////////////////////////////////// write serialized version for now, and convert to parallel later (may need map/reduce; may just need a concurrent vector)
 	// Solve single-destination model for all sinks and add all results
-	vector<double> flows(0.0, Net->core_arcs.size()); // total flow vector over all destinations
+	vector<double> flows(Net->core_arcs.size(), 0.0); // total flow vector over all destinations
 	double wait = 0.0; // total waiting time over all destinations
 	cout << "Solving single-sink models for sink: ";
 	for (int i = 0; i < stop_size; i++)
@@ -48,7 +48,27 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 
 
 
-	/////////////////////////////////////////////////
+	///////////////////////////////////////////////// all file output below is temporary for debugging
+	ofstream flow_file("output/flows.txt");
+	if (flow_file.is_open())
+	{
+		cout << "Writing flow file..." << endl;
+
+		// Write waiting time
+		flow_file << "Waiting: " << wait << endl;
+
+		// Write comment line
+		flow_file << "ArcID\tFlow" << endl;
+
+		// Write contents of flow vector
+		for (int i = 0; i < flows.size(); i++)
+			flow_file << i << '\t' << flows[i] << endl;
+	}
+	else
+		cout << "Solution log file failed to open." << endl;
+	cout << "Successfully recorded solution!" << endl;
+	//////////////////////////////////////////////
+
 	return make_pair(flows, wait);
 }
 
@@ -81,12 +101,12 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		arc_queue.push(make_pair(Net->stop_nodes[dest]->core_in[i]->cost, Net->stop_nodes[dest]->core_in[i]->id));
 	stack<int> attractive_arcs; // set of attractive arcs, stored as a stack for loading in reverse order
 
-	int count = 0;
+	int count = 0;////////////////////////////
 	cout << "\nProcessing destination node " << dest << endl;
 	// Main label setting loop (continues until every arc has been processed)
 	while (unprocessed_arcs.empty() == false && arc_queue.empty() == false)
 	{
-		count++;
+		count++;/////////////////////////////
 
 		// Find the arc that minimizes the sum of its head's label and its own cost
 		double min_label = arc_queue.top().first;
@@ -138,17 +158,17 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 
 
-
+		///////////////////////////////
 		if (count > 20)
 		{
 			cout << "Artificially ending." << endl;
 			break;
 		}
-
 		cout << "Made it to loop end." << endl;
 		cout << "Unprocessed arcs size = " << unprocessed_arcs.size() << endl;
 		cout << "Arc queue size = " << arc_queue.size() << endl;
 		cout << "-----------------------------" << endl;
+		//////////////////////////////////
 	}
 
 	cout << "Part 1 ended." << endl;
