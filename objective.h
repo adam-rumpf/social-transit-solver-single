@@ -36,7 +36,7 @@ struct Objective
 	Network * Net; // pointer to the main transit network object
 	int lowest_metrics = 1; // size of lowest metric set to use for calculating the objective value
 	double gravity_exponent = 1.0; // gravity metric distance falloff exponent (will be made negative for calculations)
-	double multiplier = 1.0; // multiplication factor for objective value
+	double multiplier = 1.0; // multiplication factor for metric values
 	int pop_size; // number of population nodes
 	int fac_size; // number of facility nodes
 

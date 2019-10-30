@@ -68,7 +68,7 @@ double Objective::calculate(const vector<int> &fleet)
 	for (int i = 0; i < lowest_metrics; i++)
 		sum += metrics[i];
 
-	return -multiplier * sum; // return negative sum times multiplier
+	return -sum; // return negative sum
 }
 
 /**
@@ -162,35 +162,35 @@ void Objective::population_to_all_facilities(int source, vector<double> &row)
 		dist_queue.pop(); // remove entry from queue
 
 		// Only proceed if we can verify that this is the most recent copy of the node in the priority queue
-		if (dist[chosen_node] == chosen_dist)
+		if (dist[chosen_node] < chosen_dist)
+			continue;
+
+		// Try to remove node from unprocessed sink list (if it is not in the list, nothing will happen)
+		unsearched_sinks.erase(chosen_node);
+
+		// Search core out-neighborhood for distance reductions
+		for (int i = 0; i < Net->nodes[chosen_node]->core_out.size(); i++)
 		{
-			// Try to remove node from unprocessed sink list (if it is not in the list, nothing will happen)
-			unsearched_sinks.erase(chosen_node);
-
-			// Search core out-neighborhood for distance reductions
-			for (int i = 0; i < Net->nodes[chosen_node]->core_out.size(); i++)
+			int head = Net->nodes[chosen_node]->core_out[i]->head->id; // current out-neighbor
+			double new_dist = dist[chosen_node] + Net->nodes[chosen_node]->core_out[i]->cost; // own distance plus outgoing arc's cost
+			if (new_dist < dist[head])
 			{
-				int head = Net->nodes[chosen_node]->core_out[i]->head->id; // current out-neighbor
-				double new_dist = dist[chosen_node] + Net->nodes[chosen_node]->core_out[i]->cost; // own distance plus outgoing arc's cost
-				if (new_dist < dist[head])
-				{
-					// If the new distance is an improvement, update the out-neighbor's distance and add a new copy to the queue
-					dist[head] = new_dist;
-					dist_queue.push(make_pair(new_dist, head));
-				}
+				// If the new distance is an improvement, update the out-neighbor's distance and add a new copy to the queue
+				dist[head] = new_dist;
+				dist_queue.push(make_pair(new_dist, head));
 			}
+		}
 
-			// Repeat search for access out-neighborhood
-			for (int i = 0; i < Net->nodes[chosen_node]->access_out.size(); i++)
+		// Repeat search for access out-neighborhood
+		for (int i = 0; i < Net->nodes[chosen_node]->access_out.size(); i++)
+		{
+			int head = Net->nodes[chosen_node]->access_out[i]->head->id; // current out-neighbor
+			double new_dist = dist[chosen_node] + Net->nodes[chosen_node]->access_out[i]->cost; // own distance plus outgoing arc's cost
+			if (new_dist < dist[head])
 			{
-				int head = Net->nodes[chosen_node]->access_out[i]->head->id; // current out-neighbor
-				double new_dist = dist[chosen_node] + Net->nodes[chosen_node]->access_out[i]->cost; // own distance plus outgoing arc's cost
-				if (new_dist < dist[head])
-				{
-					// If the new distance is an improvement, update the out-neighbor's distance and add a new copy to the queue
-					dist[head] = new_dist;
-					dist_queue.push(make_pair(new_dist, head));
-				}
+				// If the new distance is an improvement, update the out-neighbor's distance and add a new copy to the queue
+				dist[head] = new_dist;
+				dist_queue.push(make_pair(new_dist, head));
 			}
 		}
 	}
@@ -237,5 +237,5 @@ double Objective::population_metric(int pop, vector<vector<double>> &distance, v
 	for (int i = 0; i < fac_size; i++)
 		sum += (Net->facility_nodes[i]->value * pow(distance[pop][i], -gravity_exponent)) / fac_metric[i];
 
-	return sum;
+	return multiplier * sum; // apply multiplication factor to result
 }
