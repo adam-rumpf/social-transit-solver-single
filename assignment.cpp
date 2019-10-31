@@ -103,7 +103,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 	int count = 0;////////////////////////////
 	cout << "\nProcessing destination node " << dest << endl;
-	// Main label setting loop (continues until every arc has been processed)
+	// Main label setting loop (continues until every arc has been processed or the queue is empty)
 	while (unprocessed_arcs.empty() == false && arc_queue.empty() == false)
 	{
 		count++;/////////////////////////////
@@ -122,11 +122,16 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		}
 		cout << "Keeping arc " << min_arc << endl;
 
+		// Mark arc as processed and get its tail
 		unprocessed_arcs.erase(min_arc);
 		int min_tail = Net->core_arcs[min_arc]->tail->id;
 
+		// Skip arcs with zero frequency (can occur for boarding arcs on lines with no vehicles)
+		if (freq[min_arc] == 0)
+			continue;
+
 		// Update the node label of the chosen arc's tail
-		cout << "Updating node label for a frequency-based arc." << endl;
+		/*cout << "Updating node label for a frequency-based arc." << endl;
 		if (node_label[min_tail] < FINITE_INFINITY)
 		{
 			// Standard node label update
@@ -142,14 +147,26 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 			node_label[min_tail] = (1 / freq[min_arc]) + min_label;
 			node_freq[min_tail] = freq[min_arc];
 			attractive_arcs.push(min_arc);
-		}
+		}*/
 
-		// Update arc labels that are affected by the updated tail node
-		for (int i = 0; i < Net->core_nodes[min_tail]->core_in.size(); i++)
+		// Decide whether the current arc offers an improvement for its tail's label
+		if (node_label[min_tail] >= min_label)
 		{
-			arc_queue.push(make_pair(Net->core_nodes[min_tail]->core_in[i]->cost + node_label[min_tail], Net->core_nodes[min_tail]->core_in[i]->id));
-			cout << "Updating arc " << Net->core_nodes[min_tail]->core_in[i]->id << " (" << Net->core_nodes[min_tail]->core_in[i]->tail->id << "," << Net->core_nodes[min_tail]->core_in[i]->head->id << ") with u+c = " << Net->core_nodes[min_tail]->core_in[i]->cost + node_label[min_tail] << endl;
+			// Update tail label, tail frequency, and add arc to attractive arc stack
+			cout << "Label improvement." << endl;
+			node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+			node_freq[min_tail] += freq[min_arc];
+			attractive_arcs.push(min_arc);
+
+			// Update arc labels that are affected by the updated tail node
+			for (int i = 0; i < Net->core_nodes[min_tail]->core_in.size(); i++)
+			{
+				arc_queue.push(make_pair(Net->core_nodes[min_tail]->core_in[i]->cost + node_label[min_tail], Net->core_nodes[min_tail]->core_in[i]->id));
+				cout << "Updating arc " << Net->core_nodes[min_tail]->core_in[i]->id << " (" << Net->core_nodes[min_tail]->core_in[i]->tail->id << "," << Net->core_nodes[min_tail]->core_in[i]->head->id << ") with u+c = " << Net->core_nodes[min_tail]->core_in[i]->cost + node_label[min_tail] << endl;
+			}
 		}
+		else
+			cout << "No label improvement." << endl;
 
 
 
@@ -159,23 +176,34 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 
 		///////////////////////////////
-		if (count > 20)
+		/*if (count > 20)
 		{
 			cout << "Artificially ending." << endl;
 			break;
-		}
+		}*/
 		cout << "Made it to loop end." << endl;
 		cout << "Unprocessed arcs size = " << unprocessed_arcs.size() << endl;
 		cout << "Arc queue size = " << arc_queue.size() << endl;
+		cout << "Attractive arc stack size = " << attractive_arcs.size() << endl;
 		cout << "-----------------------------" << endl;
 		//////////////////////////////////
 	}
 
+	cout << "\n========================================" << endl;
 	cout << "Part 1 ended." << endl;
+	cout << "========================================\n" << endl;
 
-	// Arc loading
+	// Main arc loading loop
 	///////// go through every arc; skip if not chosen; if boarding, also add this headway*vol to the waiting time total
 	///////// the process order should come from just popping the stack elements
+	while (attractive_arcs.empty() == false)
+	{
+		//
+	}
+
+	cout << "\n========================================" << endl;
+	cout << "Part 2 ended." << endl;
+	cout << "========================================\n" << endl;
 }
 
 /// Nonlinear assignment constructor reads in model data from file and sets network pointer.
