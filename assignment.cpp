@@ -36,8 +36,10 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 	cout << "Solving single-sink models for sink: ";
 	for (int i = 0; i < stop_size; i++)
 	{
-		cout << i << ' ';
-		flows_to_destination(i, flows, wait, freq);
+		//////////////////////////////////cout << i << ' ';
+		////////////////////////////////flows_to_destination(i, flows, wait, freq);
+		cout << "\n\nHijacking process to calculate destination " << stop_size - 1 << endl;
+		flows_to_destination(stop_size - 1, flows, wait, freq);
 
 
 		break;/////////////////////////////////////////////////
@@ -86,24 +88,27 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
 
-	The arc loading algorithm involves processing all of the selected attractive arcs in descending order of their cost-plus-head-label from the label setting algorithm. In order to accomplish this quickly we store the attractive arc set as a stack in order to process the arcs in reverse order relative to when they were added.
+	The arc loading algorithm involves processing all of the selected attractive arcs in descending order of their cost-plus-head-label from the label setting algorithm. This is accomplished in a similar way, with a copy of the cost-plus-head-label being added to a max-priority queue each time the tail label is updated.
 	*/
 
-	// Initialize label setting structures
+	// Initialize data structures
 	vector<double> node_label(Net->core_nodes.size(), FINITE_INFINITY); // tentative distances from every node to the destination
 	node_label[Net->stop_nodes[dest]->id] = 0.0; // distance from destination to self is 0
-	vector<double> node_freq(Net->core_nodes.size(), 0.0); // total frequency of all attractive lines leaving a node
-	vector<double> node_vol(Net->core_nodes.size(), 0.0); // total flow leaving a node
+	vector<double> node_freq(Net->core_nodes.size(), 0.0); // total frequency of all attractive arcs leaving a node
+	/*vector<double> node_vol(Net->core_nodes.size(), 0.0); // total flow leaving a node
 	for (int i = 0; i < Net->stop_nodes.size(); i++)
-		node_vol[Net->stop_nodes[i]->id] = Net->stop_nodes[dest]->incoming_demand[i]; // initialize travel volumes for stop nodes based on demand for destination
+		// Initialize travel volumes for stop nodes based on demand for destination
+		node_vol[Net->stop_nodes[i]->id] = Net->stop_nodes[dest]->incoming_demand[i];*/
 	unordered_set<int> unprocessed_arcs; // arcs not yet chosen in the main label setting loop, in order to ensure that each arc is processed only once
 	for (int i = 0; i < Net->core_arcs.size(); i++)
-		unprocessed_arcs.insert(Net->core_arcs[i]->id); // all arcs are initially unprocessed
+		// All arcs are initially unprocessed
+		unprocessed_arcs.insert(Net->core_arcs[i]->id);
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, greater<arc_cost_pair>> arc_queue; // min-priority queue to quickly access the unprocessed arc with the minimum cost-plus-head-distance value
 	for (int i = 0; i < Net->stop_nodes[dest]->core_in.size(); i++)
 		// Set all non-infinite arc labels (which will include only the sink node's incoming arcs)
 		arc_queue.push(make_pair(Net->stop_nodes[dest]->core_in[i]->cost, Net->stop_nodes[dest]->core_in[i]->id));
-	stack<int> attractive_arcs; // set of attractive arcs, stored as a stack for loading in reverse order
+	stack<int> attractive_arcs; // set of attractive arcs
+	///////////priority_queue<arc_cost_pair, vector<arc_cost_pair>, less<arc_cost_pair>> load_queue; // max-priority queue to process attractive arcs in reverse order
 
 	int count = 0;////////////////////////////
 	cout << "\nProcessing destination node " << dest << endl;
@@ -111,9 +116,11 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	// Main label setting loop
 
 	// Initialize label setting variables
-	double min_label; // chosen node label
+	double min_label; // chosen arc's cost-plus-head-label value
 	int min_arc; // chosen node's incoming arc
 	int min_tail; // chosen arc's tail node ID
+	int updated_arc; // ID of arc whose queue position must be updated
+	double updated_label; // arc queue key for update
 
 	while (unprocessed_arcs.empty() == false && arc_queue.empty() == false)
 	{
@@ -163,28 +170,40 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		// Decide whether the current arc offers an improvement for its tail's label
 		if (node_label[min_tail] >= min_label)
 		{
-			// Update tail label, tail frequency, and add arc to attractive arc stack
-			cout << "Label improvement." << endl;
-			node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+			// Update tail label, tail frequency, and add arc to attractive arc set
+			cout << "Label improvement." << endl;/////////////////////////////
+			if (node_label[min_tail] < FINITE_INFINITY)
+				// Standard update
+				node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+			else
+				// First-time update (from initially-infinite label)
+				node_label[min_tail] = (1 + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+
 			node_freq[min_tail] += freq[min_arc];
+			cout << "Changing node " << Net->core_nodes[min_tail]->id << " frequency to " << node_freq[min_tail] << endl;
 			attractive_arcs.push(min_arc);
+			cout << "Adding attractive arc with u+c = " << node_label[Net->core_arcs[min_arc]->head->id] + Net->core_arcs[min_arc]->cost << endl;
 
 			// Update arc labels that are affected by the updated tail node
 			for (int i = 0; i < Net->core_nodes[min_tail]->core_in.size(); i++)
 			{
-				arc_queue.push(make_pair(Net->core_nodes[min_tail]->core_in[i]->cost + node_label[min_tail], Net->core_nodes[min_tail]->core_in[i]->id));
-				cout << "Updating arc " << Net->core_nodes[min_tail]->core_in[i]->id << " (" << Net->core_nodes[min_tail]->core_in[i]->tail->id << "," << Net->core_nodes[min_tail]->core_in[i]->head->id << ") with u+c = " << Net->core_nodes[min_tail]->core_in[i]->cost + node_label[min_tail] << endl;
+				// Calculate arc to update and new label
+				updated_arc = Net->core_nodes[min_tail]->core_in[i]->id;
+				updated_label = Net->core_arcs[updated_arc]->cost + node_label[min_tail];
+
+				arc_queue.push(make_pair(updated_label, updated_arc));
+				cout << "Updating arc " << updated_arc << " (" << Net->core_arcs[updated_arc]->tail->id << "," << Net->core_arcs[updated_arc]->head->id << ") with u+c = " << updated_label << endl;
 			}
 		}
 		else
 			cout << "No label improvement." << endl;
 
 		///////////////////////////////
-		/*if (count > 20)
+		if (count > 20)
 		{
 			cout << "Artificially ending." << endl;
 			break;
-		}*/
+		}
 		cout << "Made it to loop end." << endl;
 		cout << "Unprocessed arcs size = " << unprocessed_arcs.size() << endl;
 		cout << "Arc queue size = " << arc_queue.size() << endl;
@@ -197,6 +216,12 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	cout << "Part 1 ended." << endl;
 	cout << "========================================\n" << endl;
 
+	///////////////////////////////////////////////////////////////////
+	/*
+	Insert an intermediate step where we process all attractive arcs (in any order) to evaluate their latest u+c values, and put them into a max-priority-queue for the processing order of the final step.
+	*/
+	///////////////////////////////////////////////////////////////////
+
 	// Main arc loading loop
 
 	///////// go through every arc; skip if not chosen; if boarding, also add this headway*vol to the waiting time total
@@ -208,9 +233,9 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	int max_tail; // chosen arc's tail node ID
 	double added_flow; // flow to add to the current arc
 
-	while (attractive_arcs.empty() == false)
+	/*while (attractive_arcs.empty() == false)
 	{
-		// Pop the next arc out of the stack and get its endpoints
+		// Pop the next arc out of the queue and get its endpoints
 		max_arc = attractive_arcs.top();
 		cout << "Increasing arc " << max_arc << " (" << Net->core_arcs[max_arc]->tail->id << "," << Net->core_arcs[max_arc]->head->id << ") by ";///////////////////////////
 		max_head = Net->core_arcs[max_arc]->head->id;
@@ -222,7 +247,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		cout << added_flow << endl;/////////////////////////
 		flows[max_arc] += added_flow;
 		node_vol[max_head] += added_flow;
-	}
+	}*/
 
 	cout << "\n========================================" << endl;
 	cout << "Part 2 ended." << endl;
