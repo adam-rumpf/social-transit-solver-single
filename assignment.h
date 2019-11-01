@@ -18,8 +18,6 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 #include <vector>
 #include "network.h"
 
-#define FINITE_INFINITY 1.0e30
-
 using namespace std;
 using namespace concurrency;
 

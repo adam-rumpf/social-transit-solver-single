@@ -24,7 +24,7 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 		line_freq[i] = Net->lines[i]->frequency(fleet[i]);
 
 	// Use the line frequencies to generate arc frequencies
-	vector<double> freq(Net->core_arcs.size(), FINITE_INFINITY);
+	vector<double> freq(Net->core_arcs.size(), INFINITY);
 	for (int i = 0; i < Net->lines.size(); i++)
 		for (int j = 0; j < Net->lines[i]->boarding.size(); j++)
 			freq[Net->lines[i]->boarding[j]->id] = line_freq[i];
@@ -92,7 +92,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	*/
 
 	// Initialize data structures
-	vector<double> node_label(Net->core_nodes.size(), FINITE_INFINITY); // tentative distances from every node to the destination
+	vector<double> node_label(Net->core_nodes.size(), INFINITY); // tentative distances from every node to the destination
 	node_label[Net->stop_nodes[dest]->id] = 0.0; // distance from destination to self is 0
 	vector<double> node_freq(Net->core_nodes.size(), 0.0); // total frequency of all attractive arcs leaving a node
 	/*vector<double> node_vol(Net->core_nodes.size(), 0.0); // total flow leaving a node
@@ -107,7 +107,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	for (int i = 0; i < Net->stop_nodes[dest]->core_in.size(); i++)
 		// Set all non-infinite arc labels (which will include only the sink node's incoming arcs)
 		arc_queue.push(make_pair(Net->stop_nodes[dest]->core_in[i]->cost, Net->stop_nodes[dest]->core_in[i]->id));
-	stack<int> attractive_arcs; // set of attractive arcs
+	unordered_set<int> attractive_arcs; // set of attractive arcs
 	///////////priority_queue<arc_cost_pair, vector<arc_cost_pair>, less<arc_cost_pair>> load_queue; // max-priority queue to process attractive arcs in reverse order
 
 	int count = 0;////////////////////////////
@@ -168,25 +168,70 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		}*/
 
 		// Decide whether the current arc offers an improvement for its tail's label
+		/*
+		Distinctions:
+		-First time update? (determine based on whether the tail label is INFINITY or not)
+			-Breaks into two separate versions of tail label update equation
+		-No-wait attractive arc? (determine based on whether freq[min_arc] is INFINITY or not)
+			-If not, then perform the standard updates
+			-If so, then set the tail label directly to the u+c value, set the tail frequency directly to INFINITY, and remove all other arcs leaving the tail as candidates from the attractive arc set and the unprocessed arc set
+		Because the no-wait option overrides the tail's update process, that check should occur before the first-time check
+		*/
 		if (node_label[min_tail] >= min_label)
 		{
-			// Update tail label, tail frequency, and add arc to attractive arc set
-			cout << "Label improvement." << endl;/////////////////////////////
-			if (node_label[min_tail] < FINITE_INFINITY)
-				// Standard update
-				node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
-			else
-				// First-time update (from initially-infinite label)
-				node_label[min_tail] = (1 + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+			cout << "Label improvement, so arc is attractive!" << endl;/////////////////////////
+			// Check whether the attractive arc has infinite frequency
+			if (freq[min_arc] < INFINITY)
+			{
+				// Finite-frequency attractive arc (should include only boarding arcs)
+				cout << "Boarding attractive arc." << endl;/////////////////////
 
-			node_freq[min_tail] += freq[min_arc];
-			cout << "Changing node " << Net->core_nodes[min_tail]->id << " frequency to " << node_freq[min_tail] << endl;
-			attractive_arcs.push(min_arc);
+				// Update tail label
+				if (node_label[min_tail] < INFINITY)
+					// Standard update
+					node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+				else
+					// First-time update (from initially-infinite label)
+					node_label[min_tail] = (1 / freq[min_arc]) + min_label;
+
+				// Update tail frequency
+				node_freq[min_tail] += freq[min_arc];
+				cout << "Changing node " << Net->core_nodes[min_tail]->id << " frequency to " << node_freq[min_tail] << endl;///////////////////////////
+			}
+			else
+			{
+				// Infinite-frequency attractive arc
+				cout << "Infinite-frequency attractive arc." << endl;/////////////////////
+
+				// Update tail label and frequency
+				node_label[min_tail] = min_label;
+				node_freq[min_tail] = INFINITY;
+				cout << "Changing node " << Net->core_nodes[min_tail]->id << " frequency to INF." << endl;///////////////////////
+
+				// Remove all other attractive arcs leaving the tail
+				////////////////////////////// May need to also remove all arcs from the unprocessed set.
+				for (int i = 0; i < Net->core_nodes[min_tail]->core_out.size(); i++)
+				{
+					cout << "Checking whether to delete outgoing arc " << Net->core_nodes[min_tail]->core_out[i]->id << " (" << Net->core_nodes[min_tail]->core_out[i]->tail->id << "," << Net->core_nodes[min_tail]->core_out[i]->head->id << ")" << endl;
+					///////////////////////// Delete everything here except for the erase() line, since the test is just here to explain deletions.
+					if (attractive_arcs.count(Net->core_nodes[min_tail]->core_out[i]->id) > 0)
+						cout << "Deleting attractive arc " << Net->core_nodes[min_tail]->core_out[i]->id << " (" << Net->core_nodes[min_tail]->core_out[i]->tail->id << "," << Net->core_nodes[min_tail]->core_out[i]->head->id << ")" << endl;
+					attractive_arcs.erase(Net->core_nodes[min_tail]->core_out[i]->id);
+				}
+			}
+
+			// Add arc to attractive arc set
+			attractive_arcs.insert(min_arc);
 			cout << "Adding attractive arc with u+c = " << node_label[Net->core_arcs[min_arc]->head->id] + Net->core_arcs[min_arc]->cost << endl;
+
+
+
+
 
 			// Update arc labels that are affected by the updated tail node
 			for (int i = 0; i < Net->core_nodes[min_tail]->core_in.size(); i++)
 			{
+				//////////////////////////////// Add something to deal with previously-chosen attractive arcs that have been dropped.
 				// Calculate arc to update and new label
 				updated_arc = Net->core_nodes[min_tail]->core_in[i]->id;
 				updated_label = Net->core_arcs[updated_arc]->cost + node_label[min_tail];
@@ -219,6 +264,8 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	///////////////////////////////////////////////////////////////////
 	/*
 	Insert an intermediate step where we process all attractive arcs (in any order) to evaluate their latest u+c values, and put them into a max-priority-queue for the processing order of the final step.
+
+	Test the loading results for now (even if the attractive arc set seems not to make much sense) and see if the flows make sense. If not, try modifying the attractive out-neighborhood deletions.
 	*/
 	///////////////////////////////////////////////////////////////////
 
