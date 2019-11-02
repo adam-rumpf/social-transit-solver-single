@@ -24,6 +24,9 @@ Includes a Network, Arc, Node, and Line class. Objects from these classes are bu
 #define WALKING_ARC 3
 #define ACCESS_ARC 4
 
+// Other technical definitions
+#define EPSILON 0.00000001 // very small positive value
+
 using namespace std;
 
 // Structure declarations
