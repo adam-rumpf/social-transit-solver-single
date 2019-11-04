@@ -326,7 +326,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		cout << "Adding a volume of " << added_flow << endl;
 
 		// Update total destination-independent arc volume
-		flows[max_arc] += added_flow;////////////////////////////////////////////////// figure out how to do in parallel
+		flows[max_arc] += added_flow;////////////////////////////////////////////////// figure out how to do in parallel (may need to collect the destination-dependent flows in a concurrent_queue for each arc and then total them at the end; also try running some tests with reader/writer locks)
 
 		// Remove arc from priority queue
 		load_queue.pop();
@@ -354,6 +354,12 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	cout << "========================================\n" << endl;
 
 	///////////////////////////////////////// calculate waiting time; for each i it should be the min of all v_a/f_a for every arc a that leaves node i; shouldn't have to worry about zero frequency arcs since they can never be in the attractive set
+	/*
+	Waiting time w_i is meant to satisfy v_a <= f_a w_i for all arcs a that leave node i.
+	If we know the volumes then we have (v_a/f_a) <= w_i, and we want to minimize w_i, so w_i should equal the maximum v_a/f_a over all leaving arcs.
+	We could do this by processing each node one-by-one at the end, or by updating the node waiting times as we load the arcs, where at each step we decide whether or not to increase the tail node's waiting time.
+	If the arc is infinite-frequency, then its tail will never have any waiting time, so during infinite-frequency arc loading we don't need to do anything.
+	*/
 }
 
 /// Nonlinear assignment constructor reads in model data from file and sets network pointer.
