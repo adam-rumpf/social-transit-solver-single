@@ -29,21 +29,15 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 		for (int j = 0; j < Net->lines[i]->boarding.size(); j++)
 			freq[Net->lines[i]->boarding[j]->id] = line_freq[i];
 
-	///////////////////////////////////////////////////////////////// write serialized version for now, and convert to parallel later (may need map/reduce; may just need a concurrent vector)
 	// Solve single-destination model for all sinks and add all results
 	vector<double> flows(Net->core_arcs.size(), 0.0); // total flow vector over all destinations
 	double wait = 0.0; // total waiting time over all destinations
 	cout << "Solving single-sink models for sink: ";
-	for (int i = 0; i < stop_size; i++)
+	for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
 	{
-		//////////////////////////////////cout << i << ' ';
-		////////////////////////////////flows_to_destination(i, flows, wait, freq);
-		cout << "\n\nHijacking process to calculate destination " << stop_size - 1 << endl;
-		flows_to_destination(stop_size - 1, flows, wait, freq);
-
-
-		break;/////////////////////////////////////////////////
-	}
+		cout << s->id << ' ';
+		flows_to_destination(s->id, flows, wait, freq);
+	});
 	cout << endl;
 
 
