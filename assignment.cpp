@@ -48,31 +48,6 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 	cout << '|' << endl;
 	cout << "Total waiting time: " << waiting << endl;
 
-
-
-
-
-	///////////////////////////////////////////////// all file output below is temporary for debugging
-	ofstream flow_file("output/flows.txt");
-	if (flow_file.is_open())
-	{
-		cout << "Writing flow file..." << endl;
-
-		// Write waiting time
-		flow_file << "Waiting: " << wait << endl;
-
-		// Write comment line
-		flow_file << "ArcID\tFlow" << endl;
-
-		// Write contents of flow vector
-		for (int i = 0; i < flows.size(); i++)
-			flow_file << i << '\t' << flows[i] << endl;
-	}
-	else
-		cout << "Solution log file failed to open." << endl;
-	cout << "Successfully recorded solution!" << endl;
-	//////////////////////////////////////////////
-
 	return make_pair(flows, waiting);
 }
 
@@ -214,11 +189,14 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 		// Distribute volume from tail
 		if (freq[chosen_arc] < INFINITY)
+		{
 			// Finite-frequency arc
-			added_flow = (freq[chosen_arc] / node_freq[chosen_tail]) * node_vol[chosen_tail];
+			added_flow = (freq[chosen_arc] / node_freq[chosen_tail]) * node_vol[chosen_tail]; // distribute flow proportionally according to frequency
+			node_wait[chosen_tail] = max(node_wait[chosen_tail], added_flow / freq[chosen_arc]); // update waiting time to be bounded below by all outgoing flow:frequency ratios
+		}
 		else
 			// Infinite-frequency arc
-			added_flow = node_vol[chosen_tail];
+			added_flow = node_vol[chosen_tail]; // all flow goes to single outgoing arc
 
 		// If this results in a nonzero flow increase, update the head and add the change to an update stack
 		if (added_flow > 0)
@@ -227,6 +205,11 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 			nonzero_flows.push(make_pair(added_flow, chosen_arc));
 		}
 	}
+
+	// Sum all waiting times
+	double total_wait = 0.0;
+	for (int i = 0; i < node_wait.size(); i++)
+		total_wait += node_wait[i];
 
 	// Process nonzero flow queue while reader/writer lock is engaged
 	flow_lock.lock();
@@ -239,13 +222,10 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	}
 	flow_lock.unlock();
 
-	///////////////////////////////////////// calculate waiting time; for each i it should be the min of all v_a/f_a for every arc a that leaves node i; shouldn't have to worry about zero frequency arcs since they can never be in the attractive set
-	/*
-	Waiting time w_i is meant to satisfy v_a <= f_a w_i for all arcs a that leave node i.
-	If we know the volumes then we have (v_a/f_a) <= w_i, and we want to minimize w_i, so w_i should equal the maximum v_a/f_a over all leaving arcs.
-	We could do this by processing each node one-by-one at the end, or by updating the node waiting times as we load the arcs, where at each step we decide whether or not to increase the tail node's waiting time.
-	If the arc is infinite-frequency, then its tail will never have any waiting time, so during infinite-frequency arc loading we don't need to do anything.
-	*/
+	// Increment total waiting time while reader/writer lock is engaged
+	wait_lock.lock();
+	waiting += total_wait;
+	wait_lock.unlock();
 }
 
 /// Nonlinear assignment constructor reads in model data from file and sets network pointer.
@@ -316,12 +296,12 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 {
 	// Get initial solution
 	vector<double> flows = initial_sol.first;
-	double wait = initial_sol.second;
+	double waiting = initial_sol.second;
 
 	////////////////////////////////////////////////////////////////
 	/////////////////////// For now, just directly call the nonlinear model.
 	////////////////////////////////////////////////////////////////
-	make_pair(flows, wait) = Submodel->calculate(fleet);
+	make_pair(flows, waiting) = Submodel->calculate(fleet);
 
 
 
@@ -331,5 +311,5 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 
 
 	////////////////////////////
-	return make_pair(flows, wait);
+	return make_pair(flows, waiting);
 }
