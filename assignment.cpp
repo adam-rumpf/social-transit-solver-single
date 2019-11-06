@@ -106,6 +106,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		arc_queue.push(make_pair(Net->stop_nodes[dest]->core_in[i]->cost, Net->stop_nodes[dest]->core_in[i]->id));
 	unordered_set<int> attractive_arcs; // set of attractive arcs
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, less<arc_cost_pair>> load_queue; // max-priority queue to process attractive arcs in reverse order
+	stack<arc_cost_pair> nonzero_flows; // stack of flow increase/arc ID pairs for quickly processing only the nonzero updates
 
 	// Main label setting loop
 
@@ -203,8 +204,9 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	{
 		// Process attractive arcs in descending order of cost-plus-head-label value
 
-		// Get next arc's properties
+		// Get next arc's properties and remove from queue
 		max_arc = load_queue.top().second;
+		load_queue.pop();
 		max_tail = Net->core_arcs[max_arc]->tail->id;
 		max_head = Net->core_arcs[max_arc]->head->id;
 
@@ -216,18 +218,24 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 			// Infinite-frequency arc
 			added_flow = node_vol[max_tail];
 
-		// Update head
-		node_vol[max_head] += added_flow;
-
-		// Update total destination-independent arc volume
-		////////////////////////////////// Redo this to maintain a queue of pairs of (id,increase) values that includes only the nonzero changes, then lock down each thread while it processes its own arc queue.
-		flow_lock.lock();
-		flows[max_arc] += added_flow;
-		flow_lock.unlock();
-
-		// Remove arc from priority queue
-		load_queue.pop();
+		// If this results in a nonzero flow increase, update the head and add the change to an update stack
+		if (added_flow > 0)
+		{
+			node_vol[max_head] += added_flow;
+			nonzero_flows.push(make_pair(added_flow, max_arc));
+		}
 	}
+
+	// Process nonzero flow queue while reader/writer lock is engaged
+	flow_lock.lock();
+	while (nonzero_flows.empty() == false)
+	{
+		max_arc = nonzero_flows.top().second;
+		added_flow = nonzero_flows.top().first;
+		flows[max_arc] += added_flow; // apply nonzero flow increase from stack
+		nonzero_flows.pop();
+	}
+	flow_lock.unlock();
 
 	///////////////////////////////////////// calculate waiting time; for each i it should be the min of all v_a/f_a for every arc a that leaves node i; shouldn't have to worry about zero frequency arcs since they can never be in the attractive set
 	/*
