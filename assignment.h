@@ -18,8 +18,6 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 #include <vector>
 #include "network.h"
 
-#define FINITE_INFINITY 1.0e30
-
 using namespace std;
 using namespace concurrency;
 
@@ -41,7 +39,7 @@ struct ConstantAssignment
 	// Public methods
 	ConstantAssignment(Network *); // constructor sets network pointer
 	pair<vector<double>, double> calculate(vector<int> &); // calculates flow vector for a given fleet vector
-	void flows_to_destination(int, vector<double> &, double &, vector<double> &); // calculates flow vector and waiting time for a single given sink
+	void flows_to_destination(int, vector<double> &, double &, vector<double> &, reader_writer_lock &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
 };
 
 /**

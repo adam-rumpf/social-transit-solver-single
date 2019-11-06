@@ -234,6 +234,10 @@ Network::Network(string node_file_name, string arc_file_name, string od_file_nam
 					// A walking arc additionally goes into the network's walking arc list
 					walking_arcs.push_back(new_arc);
 			}
+
+			// Add a very small cost to boarding and alighting arcs
+			if (arc_type == BOARDING_ARC || arc_type == ALIGHTING_ARC)
+				new_arc->cost += EPSILON;
 		}
 
 		arc_file.close();
