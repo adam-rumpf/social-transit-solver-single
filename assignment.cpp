@@ -29,16 +29,19 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 		for (int j = 0; j < Net->lines[i]->boarding.size(); j++)
 			freq[Net->lines[i]->boarding[j]->id] = line_freq[i];
 
-	// Solve single-destination model for all sinks and add all results
+	// Solve single-destination model in parallel for all sinks and add all results
 	vector<double> flows(Net->core_arcs.size(), 0.0); // total flow vector over all destinations
 	double wait = 0.0; // total waiting time over all destinations
-	cout << "Solving single-sink models for sink: ";
-	for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
+	cout << "Solving single-sink models in parallel:\n|";
+	for (int i = 0; i < stop_size; i++)
+		cout << '-'; // length of "progress bar"
+	cout << "|\n|";
+	parallel_for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
 	{
-		cout << s->id << ' ';
-		flows_to_destination(s->id, flows, wait, freq);
+		cout << '*'; // shows progress
+		flows_to_destination(s->id, flows, wait, freq, flow_lock);
 	});
-	cout << endl;
+	cout << '|' << endl;
 
 
 
@@ -77,7 +80,7 @@ The flow vector and waiting time are passed by reference and automatically incre
 
 The algorithm here solves the constant-cost, single-destination version of the common lines problem, which is a LP similar to min-cost flow and is solvable with a Dijkstra-like label setting algorithm. This process can be parallelized over all destinations, and so should rely only on local variables.
 */
-void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &wait, vector<double> &freq)
+void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &wait, vector<double> &freq, reader_writer_lock &flow_lock)
 {
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
@@ -104,9 +107,6 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	unordered_set<int> attractive_arcs; // set of attractive arcs
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, less<arc_cost_pair>> load_queue; // max-priority queue to process attractive arcs in reverse order
 
-	int count = 0;////////////////////////////
-	cout << "\nProcessing destination node " << dest << endl;
-
 	// Main label setting loop
 
 	// Initialize label setting variables
@@ -118,21 +118,14 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 	while (unprocessed_arcs.empty() == false && arc_queue.empty() == false)
 	{
-		count++;/////////////////////////////
-
 		// Find the arc that minimizes the sum of its head's label and its own cost
 		min_label = arc_queue.top().first;
 		min_arc = arc_queue.top().second;
-		cout << "Picking arc " << min_arc << " (" << Net->core_arcs[min_arc]->tail->id << "," << Net->core_arcs[min_arc]->head->id << ") with u+c = " << min_label << endl;
 		arc_queue.pop();
 
 		// Only proceed for unprocessed arcs
 		if (unprocessed_arcs.count(min_arc) == 0)
-		{
-			cout << "Skipping arc " << min_arc << " (already processed)." << endl;
 			continue;
-		}
-		cout << "Keeping arc " << min_arc << endl;
 
 		// Mark arc as processed and get its tail
 		unprocessed_arcs.erase(min_arc);
@@ -143,42 +136,12 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 			continue;
 
 		// Update the node label of the chosen arc's tail
-		/*cout << "Updating node label for a frequency-based arc." << endl;
-		if (node_label[min_tail] < FINITE_INFINITY)
-		{
-			// Standard node label update
-			cout << "Updating node label for a finite-frequency arc (standard)." << endl;
-			node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
-			node_freq[min_tail] += freq[min_arc];
-			attractive_arcs.push(min_arc);
-		}
-		else
-		{
-			// First-time update to deal with the initially-infinite node label
-			cout << "Updating node label for a finite-frequency arc (first time)." << endl;
-			node_label[min_tail] = (1 / freq[min_arc]) + min_label;
-			node_freq[min_tail] = freq[min_arc];
-			attractive_arcs.push(min_arc);
-		}*/
-
-		// Decide whether the current arc offers an improvement for its tail's label
-		/*
-		Distinctions:
-		-First time update? (determine based on whether the tail label is INFINITY or not)
-			-Breaks into two separate versions of tail label update equation
-		-No-wait attractive arc? (determine based on whether freq[min_arc] is INFINITY or not)
-			-If not, then perform the standard updates
-			-If so, then set the tail label directly to the u+c value, set the tail frequency directly to INFINITY, and remove all other arcs leaving the tail as candidates from the attractive arc set and the unprocessed arc set
-		Because the no-wait option overrides the tail's update process, that check should occur before the first-time check
-		*/
 		if (node_label[min_tail] >= min_label)
 		{
-			cout << "Label improvement, so arc is attractive!" << endl;/////////////////////////
 			// Check whether the attractive arc has infinite frequency
 			if (freq[min_arc] < INFINITY)
 			{
 				// Finite-frequency attractive arc (should include only boarding arcs)
-				cout << "Boarding attractive arc." << endl;/////////////////////
 
 				// Update tail label
 				if (node_label[min_tail] < INFINITY)
@@ -190,82 +153,33 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 				// Update tail frequency
 				node_freq[min_tail] += freq[min_arc];
-				cout << "Changing node " << Net->core_nodes[min_tail]->id << " frequency to " << node_freq[min_tail] << endl;///////////////////////////
 			}
 			else
 			{
 				// Infinite-frequency attractive arc
-				cout << "Infinite-frequency attractive arc." << endl;/////////////////////
 
 				// Update tail label and frequency
 				node_label[min_tail] = min_label;
 				node_freq[min_tail] = INFINITY;
-				cout << "Changing node " << Net->core_nodes[min_tail]->id << " frequency to INF." << endl;///////////////////////
 
 				// Remove all other attractive arcs leaving the tail
-				////////////////////////////// May need to also remove all arcs from the unprocessed set.
 				for (int i = 0; i < Net->core_nodes[min_tail]->core_out.size(); i++)
-				{
-					cout << "Checking whether to delete outgoing arc " << Net->core_nodes[min_tail]->core_out[i]->id << " (" << Net->core_nodes[min_tail]->core_out[i]->tail->id << "," << Net->core_nodes[min_tail]->core_out[i]->head->id << ")" << endl;
-					///////////////////////// Delete everything here except for the erase() line, since the test is just here to explain deletions.
-					if (attractive_arcs.count(Net->core_nodes[min_tail]->core_out[i]->id) > 0)
-						cout << "Deleting attractive arc " << Net->core_nodes[min_tail]->core_out[i]->id << " (" << Net->core_nodes[min_tail]->core_out[i]->tail->id << "," << Net->core_nodes[min_tail]->core_out[i]->head->id << ")" << endl;
 					attractive_arcs.erase(Net->core_nodes[min_tail]->core_out[i]->id);
-				}
 			}
 
 			// Add arc to attractive arc set
 			attractive_arcs.insert(min_arc);
-			cout << "Adding attractive arc with u+c = " << node_label[Net->core_arcs[min_arc]->head->id] + Net->core_arcs[min_arc]->cost << endl;
-
-
-
-
 
 			// Update arc labels that are affected by the updated tail node
 			for (int i = 0; i < Net->core_nodes[min_tail]->core_in.size(); i++)
 			{
-				//////////////////////////////// Add something to deal with previously-chosen attractive arcs that have been dropped.
-				// Calculate arc to update and new label
+				// Find arcs to update, recalculate labels, and push updates into priority queue
 				updated_arc = Net->core_nodes[min_tail]->core_in[i]->id;
 				updated_label = Net->core_arcs[updated_arc]->cost + node_label[min_tail];
-
 				arc_queue.push(make_pair(updated_label, updated_arc));
-				cout << "Updating arc " << updated_arc << " (" << Net->core_arcs[updated_arc]->tail->id << "," << Net->core_arcs[updated_arc]->head->id << ") with u+c = " << updated_label << endl;
 			}
 		}
-		else
-			cout << "No label improvement." << endl;
-
-		///////////////////////////////
-		if (count > 40)
-		{
-			cout << "Artificially ending." << endl;
-			break;
-		}
-		cout << "Made it to loop end." << endl;
-		cout << "Unprocessed arcs size = " << unprocessed_arcs.size() << endl;
-		cout << "Arc queue size = " << arc_queue.size() << endl;
-		cout << "Attractive arc stack size = " << attractive_arcs.size() << endl;
-		cout << "-----------------------------" << endl;
-		//////////////////////////////////
 	}
-
-	cout << "\n========================================" << endl;
-	cout << "Part 1 ended." << endl;
-	cout << "========================================\n" << endl;
-
-	///////////////////////////////////////////////////////////////////
-	/*
-	Insert an intermediate step where we process all attractive arcs (in any order) to evaluate their latest u+c values, and put them into a max-priority-queue for the processing order of the final step.
-
-	Test the loading results for now (even if the attractive arc set seems not to make much sense) and see if the flows make sense. If not, try modifying the attractive out-neighborhood deletions or adding a small constant cost to all arcs.
-	*/
-	///////////////////////////////////////////////////////////////////
-
-	cout << "Printing attractive arc list:" << endl;//////////////////////////////
-	for (auto a = attractive_arcs.begin(); a != attractive_arcs.end(); a++)
-		cout << *a << ", (" << Net->core_arcs[*a]->tail->id << "," << Net->core_arcs[*a]->head->id << ")" << endl;
 
 	// Build updated max-priority queue for attractive arc set
 
@@ -276,15 +190,6 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		// Recalculate the cost-plus-head label for each attractive arc and place in a max-priority queue
 		load_queue.push(make_pair(node_label[Net->core_arcs[*a]->head->id] + Net->core_arcs[*a]->cost, *a));
 	}
-
-	/*cout << "Loading order:" << endl;////////////////////////////
-	while (load_queue.empty() == false)/////////////////////////////////
-	{
-		min_label = load_queue.top().first;
-		min_arc = load_queue.top().second;
-		cout << "Arc " << min_arc << " (" << Net->core_arcs[min_arc]->tail->id << "," << Net->core_arcs[min_arc]->head->id << ") with u+c = " << min_label << endl;
-		load_queue.pop();
-	}*/
 
 	// Main arc loading loop
 
@@ -303,9 +208,6 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		max_tail = Net->core_arcs[max_arc]->tail->id;
 		max_head = Net->core_arcs[max_arc]->head->id;
 
-		cout << "Loading arc " << max_arc << " (" << Net->core_arcs[max_arc]->tail->id << "," << Net->core_arcs[max_arc]->head->id << ") with u+c = " << load_queue.top().first << endl;
-		cout << "Tail volume Vi = " << node_vol[max_tail] << endl;
-
 		// Distribute volume from tail
 		if (freq[max_arc] < INFINITY)
 			// Finite-frequency arc
@@ -317,35 +219,15 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		// Update head
 		node_vol[max_head] += added_flow;
 
-		cout << "Adding a volume of " << added_flow << endl;
-
 		// Update total destination-independent arc volume
-		flows[max_arc] += added_flow;////////////////////////////////////////////////// figure out how to do in parallel (may need to collect the destination-dependent flows in a concurrent_queue for each arc and then total them at the end; also try running some tests with reader/writer locks)
+		////////////////////////////////// Redo this to maintain a queue of pairs of (id,increase) values that includes only the nonzero changes, then lock down each thread while it processes its own arc queue.
+		flow_lock.lock();
+		flows[max_arc] += added_flow;
+		flow_lock.unlock();
 
 		// Remove arc from priority queue
 		load_queue.pop();
-		cout << "Arcs remaining: " << load_queue.size() << endl << endl;
 	}
-
-	/*while (attractive_arcs.empty() == false)
-	{
-		// Pop the next arc out of the queue and get its endpoints
-		max_arc = attractive_arcs.top();
-		cout << "Increasing arc " << max_arc << " (" << Net->core_arcs[max_arc]->tail->id << "," << Net->core_arcs[max_arc]->head->id << ") by ";///////////////////////////
-		max_head = Net->core_arcs[max_arc]->head->id;
-		max_tail = Net->core_arcs[max_arc]->tail->id;
-		attractive_arcs.pop();
-
-		// Update flow vector volume and head node volume for the chosen arc
-		added_flow = (freq[max_arc] / node_freq[max_tail]) * node_vol[max_tail];
-		cout << added_flow << endl;/////////////////////////
-		flows[max_arc] += added_flow;
-		node_vol[max_head] += added_flow;
-	}*/
-
-	cout << "\n========================================" << endl;
-	cout << "Part 2 ended." << endl;
-	cout << "========================================\n" << endl;
 
 	///////////////////////////////////////// calculate waiting time; for each i it should be the min of all v_a/f_a for every arc a that leaves node i; shouldn't have to worry about zero frequency arcs since they can never be in the attractive set
 	/*

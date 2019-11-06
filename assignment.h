@@ -35,11 +35,12 @@ struct ConstantAssignment
 	// Public attributes
 	Network * Net; // pointer to network object
 	int stop_size; // number of stop nodes in network
+	reader_writer_lock flow_lock; // reader/writer lock for summing arc flows for each sink node
 
 	// Public methods
 	ConstantAssignment(Network *); // constructor sets network pointer
 	pair<vector<double>, double> calculate(vector<int> &); // calculates flow vector for a given fleet vector
-	void flows_to_destination(int, vector<double> &, double &, vector<double> &); // calculates flow vector and waiting time for a single given sink
+	void flows_to_destination(int, vector<double> &, double &, vector<double> &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
 };
 
 /**
