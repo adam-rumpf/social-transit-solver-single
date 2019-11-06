@@ -298,6 +298,13 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	vector<double> flows = initial_sol.first;
 	double waiting = initial_sol.second;
 
+	// Calculate line arc capacities
+	vector<double> capacities(Net->core_arcs.size(), INFINITY);
+	for_each(Net->line_arcs.begin(), Net->line_arcs.end(), [&](Arc * a)
+	{
+		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
+	});
+
 	////////////////////////////////////////////////////////////////
 	/////////////////////// For now, just directly call the nonlinear model.
 	////////////////////////////////////////////////////////////////
