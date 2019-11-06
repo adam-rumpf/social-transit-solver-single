@@ -29,9 +29,13 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 		for (int j = 0; j < Net->lines[i]->boarding.size(); j++)
 			freq[Net->lines[i]->boarding[j]->id] = line_freq[i];
 
+	// Initialize reader/writer locks for incrementing the flow and waiting variables for each hyperpath in parallel
+	reader_writer_lock flow_lock; // reader/writer lock for arc flow variables
+	reader_writer_lock wait_lock; // reader/writer lock for total waiting time variable
+
 	// Solve single-destination model in parallel for all sinks and add all results
 	vector<double> flows(Net->core_arcs.size(), 0.0); // total flow vector over all destinations
-	double wait = 0.0; // total waiting time over all destinations
+	double waiting = 0.0; // total waiting time over all destinations
 	cout << "Solving single-sink models in parallel:\n|";
 	for (int i = 0; i < stop_size; i++)
 		cout << '-'; // length of "progress bar"
@@ -39,9 +43,10 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 	parallel_for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
 	{
 		cout << '*'; // shows progress
-		flows_to_destination(s->id, flows, wait, freq, flow_lock);
+		flows_to_destination(s->id, flows, waiting, freq, flow_lock, wait_lock);
 	});
 	cout << '|' << endl;
+	cout << "Total waiting time: " << waiting << endl;
 
 
 
@@ -68,19 +73,19 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 	cout << "Successfully recorded solution!" << endl;
 	//////////////////////////////////////////////
 
-	return make_pair(flows, wait);
+	return make_pair(flows, waiting);
 }
 
 /**
 Calculates the flow vector to a given sink.
 
-Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, and line frequency vector.
+Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc flow reader/writer lock, and waiting time reader/writer lock.
 
 The flow vector and waiting time are passed by reference and automatically incremented according to the results of this function.
 
 The algorithm here solves the constant-cost, single-destination version of the common lines problem, which is a LP similar to min-cost flow and is solvable with a Dijkstra-like label setting algorithm. This process can be parallelized over all destinations, and so should rely only on local variables.
 */
-void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &wait, vector<double> &freq, reader_writer_lock &flow_lock)
+void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, vector<double> &freq, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
 {
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
@@ -88,7 +93,16 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	The arc loading algorithm involves processing all of the selected attractive arcs in descending order of their cost-plus-head-label from the label setting algorithm. This is accomplished in a similar way, with a copy of the cost-plus-head-label being added to a max-priority queue each time the tail label is updated.
 	*/
 
-	// Initialize data structures
+	// Initialize variables
+	double chosen_label; // cost-plus-head-label value chosen for current loop iteration
+	int chosen_arc; // arc ID chosen for current loop iteration
+	int chosen_tail; // tail node ID chosen for current loop iteration
+	int chosen_head; // head node ID chosen for current loop iteration
+	int updated_arc; // arc ID for label setting updates
+	double updated_label; // updated label value
+	double added_flow; // chosen arc's added flow volume
+
+	// Initialize containers
 	vector<double> node_label(Net->core_nodes.size(), INFINITY); // tentative distances from every node to the destination
 	node_label[Net->stop_nodes[dest]->id] = 0.0; // distance from destination to self is 0
 	vector<double> node_freq(Net->core_nodes.size(), 0.0); // total frequency of all attractive arcs leaving a node
@@ -96,6 +110,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	for (int i = 0; i < Net->stop_nodes.size(); i++)
 		// Initialize travel volumes for stop nodes based on demand for destination
 		node_vol[Net->stop_nodes[i]->id] = Net->stop_nodes[dest]->incoming_demand[i];
+	vector<double> node_wait(Net->core_nodes.size(), 0.0); // expected waiting time at each node
 	unordered_set<int> unprocessed_arcs; // arcs not yet chosen in the main label setting loop, in order to ensure that each arc is processed only once
 	for (int i = 0; i < Net->core_arcs.size(); i++)
 		// All arcs are initially unprocessed
@@ -110,73 +125,66 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 	// Main label setting loop
 
-	// Initialize label setting variables
-	double min_label; // chosen arc's cost-plus-head-label value
-	int min_arc; // chosen node's incoming arc
-	int min_tail; // chosen arc's tail node ID
-	int updated_arc; // ID of arc whose queue position must be updated
-	double updated_label; // arc queue key for update
-
 	while (unprocessed_arcs.empty() == false && arc_queue.empty() == false)
 	{
 		// Find the arc that minimizes the sum of its head's label and its own cost
-		min_label = arc_queue.top().first;
-		min_arc = arc_queue.top().second;
+		chosen_label = arc_queue.top().first;
+		chosen_arc = arc_queue.top().second;
 		arc_queue.pop();
 
 		// Only proceed for unprocessed arcs
-		if (unprocessed_arcs.count(min_arc) == 0)
+		if (unprocessed_arcs.count(chosen_arc) == 0)
 			continue;
 
 		// Mark arc as processed and get its tail
-		unprocessed_arcs.erase(min_arc);
-		min_tail = Net->core_arcs[min_arc]->tail->id;
+		unprocessed_arcs.erase(chosen_arc);
+		chosen_tail = Net->core_arcs[chosen_arc]->tail->id;
 
 		// Skip arcs with zero frequency (can occur for boarding arcs on lines with no vehicles)
-		if (freq[min_arc] == 0)
+		if (freq[chosen_arc] == 0)
 			continue;
 
 		// Update the node label of the chosen arc's tail
-		if (node_label[min_tail] >= min_label)
+		if (node_label[chosen_tail] >= chosen_label)
 		{
 			// Check whether the attractive arc has infinite frequency
-			if (freq[min_arc] < INFINITY)
+			if (freq[chosen_arc] < INFINITY)
 			{
 				// Finite-frequency attractive arc (should include only boarding arcs)
 
 				// Update tail label
-				if (node_label[min_tail] < INFINITY)
+				if (node_label[chosen_tail] < INFINITY)
 					// Standard update
-					node_label[min_tail] = (node_freq[min_tail] * node_label[min_tail] + freq[min_arc] * min_label) / (node_freq[min_tail] + freq[min_arc]);
+					node_label[chosen_tail] = (node_freq[chosen_tail] * node_label[chosen_tail] + freq[chosen_arc] * chosen_label) / (node_freq[chosen_tail] + freq[chosen_arc]);
 				else
 					// First-time update (from initially-infinite label)
-					node_label[min_tail] = (1 / freq[min_arc]) + min_label;
+					node_label[chosen_tail] = (1 / freq[chosen_arc]) + chosen_label;
 
 				// Update tail frequency
-				node_freq[min_tail] += freq[min_arc];
+				node_freq[chosen_tail] += freq[chosen_arc];
 			}
 			else
 			{
 				// Infinite-frequency attractive arc
 
 				// Update tail label and frequency
-				node_label[min_tail] = min_label;
-				node_freq[min_tail] = INFINITY;
+				node_label[chosen_tail] = chosen_label;
+				node_freq[chosen_tail] = INFINITY;
 
 				// Remove all other attractive arcs leaving the tail
-				for (int i = 0; i < Net->core_nodes[min_tail]->core_out.size(); i++)
-					attractive_arcs.erase(Net->core_nodes[min_tail]->core_out[i]->id);
+				for (int i = 0; i < Net->core_nodes[chosen_tail]->core_out.size(); i++)
+					attractive_arcs.erase(Net->core_nodes[chosen_tail]->core_out[i]->id);
 			}
 
 			// Add arc to attractive arc set
-			attractive_arcs.insert(min_arc);
+			attractive_arcs.insert(chosen_arc);
 
 			// Update arc labels that are affected by the updated tail node
-			for (int i = 0; i < Net->core_nodes[min_tail]->core_in.size(); i++)
+			for (int i = 0; i < Net->core_nodes[chosen_tail]->core_in.size(); i++)
 			{
 				// Find arcs to update, recalculate labels, and push updates into priority queue
-				updated_arc = Net->core_nodes[min_tail]->core_in[i]->id;
-				updated_label = Net->core_arcs[updated_arc]->cost + node_label[min_tail];
+				updated_arc = Net->core_nodes[chosen_tail]->core_in[i]->id;
+				updated_label = Net->core_arcs[updated_arc]->cost + node_label[chosen_tail];
 				arc_queue.push(make_pair(updated_label, updated_arc));
 			}
 		}
@@ -184,45 +192,39 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 
 	// Build updated max-priority queue for attractive arc set
 
-	/////////////////////////////////////////////// go through every arc; skip if not chosen; if boarding, also add this headway*vol to the waiting time total
-
 	for (auto a = attractive_arcs.begin(); a != attractive_arcs.end(); a++)
 	{
 		// Recalculate the cost-plus-head label for each attractive arc and place in a max-priority queue
 		load_queue.push(make_pair(node_label[Net->core_arcs[*a]->head->id] + Net->core_arcs[*a]->cost, *a));
 	}
 
-	// Main arc loading loop
+	vector<double>().swap(node_label); // clear node label vector, which is no longer needed
 
-	// Initialize loading loop variables
-	int max_arc; // chosen arc ID
-	int max_head; // chosen arc's head node ID
-	int max_tail; // chosen arc's tail node ID
-	double added_flow; // chosen arc's added flow volume
+	// Main arc loading loop
 
 	while (load_queue.empty() == false)
 	{
 		// Process attractive arcs in descending order of cost-plus-head-label value
 
 		// Get next arc's properties and remove from queue
-		max_arc = load_queue.top().second;
+		chosen_arc = load_queue.top().second;
 		load_queue.pop();
-		max_tail = Net->core_arcs[max_arc]->tail->id;
-		max_head = Net->core_arcs[max_arc]->head->id;
+		chosen_tail = Net->core_arcs[chosen_arc]->tail->id;
+		chosen_head = Net->core_arcs[chosen_arc]->head->id;
 
 		// Distribute volume from tail
-		if (freq[max_arc] < INFINITY)
+		if (freq[chosen_arc] < INFINITY)
 			// Finite-frequency arc
-			added_flow = (freq[max_arc] / node_freq[max_tail]) * node_vol[max_tail];
+			added_flow = (freq[chosen_arc] / node_freq[chosen_tail]) * node_vol[chosen_tail];
 		else
 			// Infinite-frequency arc
-			added_flow = node_vol[max_tail];
+			added_flow = node_vol[chosen_tail];
 
 		// If this results in a nonzero flow increase, update the head and add the change to an update stack
 		if (added_flow > 0)
 		{
-			node_vol[max_head] += added_flow;
-			nonzero_flows.push(make_pair(added_flow, max_arc));
+			node_vol[chosen_head] += added_flow;
+			nonzero_flows.push(make_pair(added_flow, chosen_arc));
 		}
 	}
 
@@ -230,9 +232,9 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	flow_lock.lock();
 	while (nonzero_flows.empty() == false)
 	{
-		max_arc = nonzero_flows.top().second;
+		chosen_arc = nonzero_flows.top().second;
 		added_flow = nonzero_flows.top().first;
-		flows[max_arc] += added_flow; // apply nonzero flow increase from stack
+		flows[chosen_arc] += added_flow; // apply nonzero flow increase from stack
 		nonzero_flows.pop();
 	}
 	flow_lock.unlock();

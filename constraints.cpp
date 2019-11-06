@@ -73,7 +73,7 @@ All of the constraint functions are evaluated using either the solution vector d
 pair<int, vector<double>> Constraint::calculate(vector<int> &sol)
 {
 	// Feed solution to assignment model to calculate flow vector
-	make_pair(flows, wait) = Assignment->calculate(sol, make_pair(flows, wait));
+	make_pair(flows, waiting) = Assignment->calculate(sol, make_pair(flows, waiting));
 
 	// Calculate user cost components
 	vector<double> ucc = user_cost_components();
@@ -95,7 +95,7 @@ Returns a vector of the user cost components, in the order of the solution log c
 vector<double> Constraint::user_cost_components()
 {
 	vector<double> uc(3, 0);
-	uc[2] = wait;
+	uc[2] = waiting;
 
 	// In-vehicle riding time
 	for (int i = 0; i < Net->line_arcs.size(); i++)
