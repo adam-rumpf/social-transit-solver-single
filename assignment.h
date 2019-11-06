@@ -64,4 +64,6 @@ struct NonlinearAssignment
 	pair<vector<double>, double> calculate(vector<int> &, pair<vector<double>, double>); // calculates flow vector for a given fleet vector and initial assignment model solution
 	double arc_cost(int, double, double); // calculates the nonlinear cost function for a given arc
 	double arc_cost_prime(int, double, double); // first derivative of arc cost function
+	double obj_prime(double, vector<double> &, vector<double> &, double &, vector<double> &, double &); // convex combination of nonlinear objective's previous and next solutions
+	double obj_prime_2(double, vector<double> &, vector<double> &, double &, vector<double> &, double &); // derivative of convex combination of nonlinear objective's previous and next solutions
 };

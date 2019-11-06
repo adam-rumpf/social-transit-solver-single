@@ -319,6 +319,10 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 
 	////////////////////////////
 	return make_pair(flows, waiting);
+
+	//////////////////////////////////// Allow the nonlinear solver object to remember flow vectors between iterations for use as an initial guess. The waiting time will always need to be an upper bound for the waiting time constraints, so we can begin each iteration by calculating a generous bound for it (possibly the sum of the largest possible waiting time at each stop, or the longest waiting time [from min nonzero frequency] times the total system demand [which is constant and can be remembered])
+	//////////////////////////////// The capacity vector should also be remembered in order to avoid repeatedly having to reallocate space.
+	///////////////////////// This can wait until the main model implementation since the single-solver will only ever call this once.
 }
 
 /**
@@ -330,11 +334,11 @@ Returns the arc's cost according to the conical congestion function.
 */
 double NonlinearAssignment::arc_cost(int id, double flow, double capacity)
 {
-	// Return infinite cost for zero-capacity arcs.
+	// Return infinite cost for zero-capacity arcs
 	if (capacity == 0)
 		return INFINITY;
 
-	// Return only the arc's base cost for infinite-capacity or zero-flow arcs.
+	// Return only the arc's base cost for infinite-capacity or zero-flow arcs
 	if (capacity >= INFINITY || flow == 0)
 		return Net->core_arcs[id]->cost;
 
@@ -347,18 +351,39 @@ double NonlinearAssignment::arc_cost(int id, double flow, double capacity)
 	return Net->core_arcs[id]->cost * (2 + sqrt(pow(conical_alpha*ratio, 2) + pow(conical_beta, 2)) - conical_alpha * ratio - conical_beta);
 }
 
-/// First derivative (with respect to flow) of the above nonlinear arc cost function.
+/// First derivative (with respect to flow) of the above nonlinear arc cost function. This is required for solving the linearized model within the Frank-Wolfe algorithm.
 double NonlinearAssignment::arc_cost_prime(int id, double flow, double capacity)
 {
-	// Return infinity for zero-capacity arcs.
+	// Return infinity for zero-capacity arcs
 	if (capacity == 0)
 		return INFINITY;
 
-	// Return zero for infinite-capacity or zero-flow arcs.
+	// Return zero for infinite-capacity or zero-flow arcs
 	if (capacity >= INFINITY || flow == 0)
 		return 0.0;
 
-	// Otherwise, return the derivative of the above conical congestion function.
+	// Otherwise, return the derivative of the above conical congestion function
 	double ratio = 1 - flow / capacity;
 	return Net->core_arcs[id]->cost*(-(ratio*(pow(conical_alpha, 2))) / (capacity*sqrt(pow(ratio*conical_alpha, 2) + pow(conical_beta, 2))) + conical_alpha / capacity);
 }
+
+/**
+Convex combination of the current and next (linearized) nonlinear model solutions.
+
+Requires a value for the convex parameter, followed by references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
+
+Returns the scalar value of the convex combination of the objectives.
+
+To explain, the optimal step size in Frank-Wolfe is determined by finding the convex combination of the previous and next solutions that minimize the objective. Because the objective is convex, this can be accomplished by simply finding the convex parameter that annuls the derivative of the objective, which is what this function is.
+*/
+double NonlinearAssignment::obj_prime(double lambda, vector<double> &capacities, vector<double> &flows_old, double &waiting_old, vector<double> &flows_new, double &waiting_new)
+{
+	// Calculate convex combination term-by-term
+	double combo = waiting_new - waiting_old;
+	for (int i = 0; i < Net->core_arcs.size(); i++)
+		combo += (flows_new[i] - flows_old[i])*arc_cost(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
+
+	return combo;
+}
+
+// Explain obj_prime_2 as the derivative of the above so that we can annul the first derivative through use of Newton's Method.
