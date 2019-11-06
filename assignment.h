@@ -63,4 +63,5 @@ struct NonlinearAssignment
 	NonlinearAssignment(string, Network *); // constructor reads assignment model data file and sets network pointer
 	pair<vector<double>, double> calculate(vector<int> &, pair<vector<double>, double>); // calculates flow vector for a given fleet vector and initial assignment model solution
 	double arc_cost(int, double, double); // calculates the nonlinear cost function for a given arc
+	double arc_cost_prime(int, double, double); // first derivative of arc cost function
 };

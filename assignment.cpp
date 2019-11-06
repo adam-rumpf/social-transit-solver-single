@@ -305,10 +305,6 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
 	});
 
-	//cout << "Arc 0 capacity: " << capacities[0] << endl; // 468
-	for (double x = 0; x < 900; x += 50)
-		cout << "Flow = " << x << ", Factor = " << x / (468.0) << ", Cost = " << arc_cost(0, x, 468) << endl;
-
 	////////////////////////////////////////////////////////////////
 	/////////////////////// For now, just directly call the nonlinear model.
 	////////////////////////////////////////////////////////////////
@@ -349,4 +345,20 @@ double NonlinearAssignment::arc_cost(int id, double flow, double capacity)
 	*/
 	double ratio = 1 - flow / capacity;
 	return Net->core_arcs[id]->cost * (2 + sqrt(pow(conical_alpha*ratio, 2) + pow(conical_beta, 2)) - conical_alpha * ratio - conical_beta);
+}
+
+/// First derivative (with respect to flow) of the above nonlinear arc cost function.
+double NonlinearAssignment::arc_cost_prime(int id, double flow, double capacity)
+{
+	// Return infinity for zero-capacity arcs.
+	if (capacity == 0)
+		return INFINITY;
+
+	// Return zero for infinite-capacity or zero-flow arcs.
+	if (capacity >= INFINITY || flow == 0)
+		return 0.0;
+
+	// Otherwise, return the derivative of the above conical congestion function.
+	double ratio = 1 - flow / capacity;
+	return Net->core_arcs[id]->cost*(-(ratio*(pow(conical_alpha, 2))) / (capacity*sqrt(pow(ratio*conical_alpha, 2) + pow(conical_beta, 2))) + conical_alpha / capacity);
 }
