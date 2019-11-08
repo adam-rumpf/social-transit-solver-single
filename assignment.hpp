@@ -38,8 +38,8 @@ struct ConstantAssignment
 
 	// Public methods
 	ConstantAssignment(Network *); // constructor sets network pointer
-	pair<vector<double>, double> calculate(vector<int> &); // calculates flow vector for a given fleet vector
-	void flows_to_destination(int, vector<double> &, double &, vector<double> &, reader_writer_lock &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
+	pair<vector<double>, double> calculate(vector<int> &, vector<double> &); // calculates flow vector for a given fleet vector and arc cost vector
+	void flows_to_destination(int, vector<double> &, double &, vector<double> &, vector<double> &, reader_writer_lock &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
 };
 
 /**
