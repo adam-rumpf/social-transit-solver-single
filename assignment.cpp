@@ -10,13 +10,13 @@ ConstantAssignment::ConstantAssignment(Network * net_in)
 /**
 Constant-cost assignment model evaluation for a given solution.
 
-Requires a fleet size vector.
+Requires a fleet size vector and nonlinear cost vector.
 
 Returns a pair containing a vector of flow values and a waiting time scalar.
 
 This model comes from the linear program formulation of the common line problem, which can be solved using a Dijkstra-like label setting algorithm. This must be done separately for every sink node, but each of these problems is independent and may be parallelized. The final result is the sum of these individual results.
 */
-pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
+pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet, vector<double> &arc_costs)
 {
 	// Generate a vector of line frequencies based on the fleet sizes
 	vector<double> line_freq(Net->lines.size());
@@ -43,7 +43,7 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 	parallel_for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
 	{
 		cout << '*'; // shows progress
-		flows_to_destination(s->id, flows, waiting, freq, flow_lock, wait_lock);
+		flows_to_destination(s->id, flows, waiting, freq, arc_costs, flow_lock, wait_lock);
 	});
 	cout << '|' << endl;
 	cout << "Total waiting time: " << waiting << endl;
@@ -54,13 +54,13 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 /**
 Calculates the flow vector to a given sink.
 
-Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc flow reader/writer lock, and waiting time reader/writer lock.
+Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc cost vector, arc flow reader/writer lock, and waiting time reader/writer lock.
 
 The flow vector and waiting time are passed by reference and automatically incremented according to the results of this function.
 
 The algorithm here solves the constant-cost, single-destination version of the common lines problem, which is a LP similar to min-cost flow and is solvable with a Dijkstra-like label setting algorithm. This process can be parallelized over all destinations, and so should rely only on local variables.
 */
-void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, vector<double> &freq, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
+void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, vector<double> &freq, vector<double> &arc_costs, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
 {
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
@@ -93,7 +93,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, greater<arc_cost_pair>> arc_queue; // min-priority queue to quickly access the unprocessed arc with the minimum cost-plus-head-distance value
 	for (int i = 0; i < Net->stop_nodes[dest]->core_in.size(); i++)
 		// Set all non-infinite arc labels (which will include only the sink node's incoming arcs)
-		arc_queue.push(make_pair(Net->stop_nodes[dest]->core_in[i]->cost, Net->stop_nodes[dest]->core_in[i]->id));
+		arc_queue.push(make_pair(arc_costs[Net->stop_nodes[dest]->core_in[i]->id], Net->stop_nodes[dest]->core_in[i]->id));
 	unordered_set<int> attractive_arcs; // set of attractive arcs
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, less<arc_cost_pair>> load_queue; // max-priority queue to process attractive arcs in reverse order
 	stack<arc_cost_pair> nonzero_flows; // stack of flow increase/arc ID pairs for quickly processing only the nonzero updates
@@ -159,7 +159,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 			{
 				// Find arcs to update, recalculate labels, and push updates into priority queue
 				updated_arc = Net->core_nodes[chosen_tail]->core_in[i]->id;
-				updated_label = Net->core_arcs[updated_arc]->cost + node_label[chosen_tail];
+				updated_label = arc_costs[Net->core_arcs[updated_arc]->id] + node_label[chosen_tail];
 				arc_queue.push(make_pair(updated_label, updated_arc));
 			}
 		}
@@ -170,7 +170,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	for (auto a = attractive_arcs.begin(); a != attractive_arcs.end(); a++)
 	{
 		// Recalculate the cost-plus-head label for each attractive arc and place in a max-priority queue
-		load_queue.push(make_pair(node_label[Net->core_arcs[*a]->head->id] + Net->core_arcs[*a]->cost, *a));
+		load_queue.push(make_pair(node_label[Net->core_arcs[*a]->head->id] + arc_costs[Net->core_arcs[*a]->id], *a));
 	}
 
 	vector<double>().swap(node_label); // clear node label vector, which is no longer needed
@@ -298,6 +298,8 @@ The overall process being used here is the Frank-Wolfe algorithm, which iterativ
 */
 pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, pair<vector<double>, double> initial_sol)
 {
+	pair<vector<double>, double> sub_pair; // containder to get submodel solution output
+
 	// Get initial solution
 	vector<double> flows = initial_sol.first;
 	double waiting = initial_sol.second;
@@ -309,10 +311,17 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
 	});
 
+	// Calculate all arc costs based on the current flow
+	vector<double> arc_costs(Net->core_arcs.size());
+	for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
+	{
+		arc_costs[a->id] = arc_cost(a->id, flows[a->id], capacities[a->id]);
+	});
+
 	////////////////////////////////////////////////////////////////
 	/////////////////////// For now, just directly call the nonlinear model.
 	////////////////////////////////////////////////////////////////
-	make_pair(flows, waiting) = Submodel->calculate(fleet);
+	sub_pair = Submodel->calculate(fleet, arc_costs);
 
 
 
