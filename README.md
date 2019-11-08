@@ -60,8 +60,10 @@ Information related to the Spiess and Florian assignment model.
 
 Contains the following rows:
 
-* `Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
-* `Cutoff`: Iteration cutoff for the Frank-Wolfe algorithm.
+* `FW_Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
+* `FW_Cutoff`: Iteration cutoff for the Frank-Wolfe algorithm.
+* `NR_Epsilon`: Function value threshold to use for ending the Newton-Raphson root finding method.
+* `NR_Cutoff`: Iteration cutoff for the Newton-Raphson method.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `2`.
 * `alpha`: Alpha parameter of the conical congestion function.
 * `beta`: Beta parameter of the conical congestion function. By definition it should equal `(2 alpha - 1)/(2 alpha - 2)`, and is included here only for convenience.

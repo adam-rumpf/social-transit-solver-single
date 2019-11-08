@@ -56,6 +56,8 @@ struct NonlinearAssignment
 	ConstantAssignment * Submodel; // pointer to constant-cost submodel
 	double error_tol; // error bound cutoff for Frank-Wolfe
 	int max_iterations; // iteration cutoff for Frank-Wolfe
+	double root_error_tol; // function value cutoff for root finding
+	int root_max_iterations; // iteration cutoff for root finding
 	double conical_alpha; // alpha parameter for conical congestion function
 	double conical_beta; // beta parameter for conical congestion function
 

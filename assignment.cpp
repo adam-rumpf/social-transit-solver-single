@@ -267,9 +267,13 @@ NonlinearAssignment::NonlinearAssignment(string input_file, Network * net_in)
 				error_tol = stod(value);
 			if (count == 2)
 				max_iterations = stoi(value);
+			if (count == 3)
+				root_error_tol = stod(value);
 			if (count == 4)
+				root_max_iterations = stoi(value);
+			if (count == 6)
 				conical_alpha = stod(value);
-			if (count == 5)
+			if (count == 7)
 				conical_beta = stod(value);
 		}
 
@@ -387,3 +391,4 @@ double NonlinearAssignment::obj_prime(double lambda, vector<double> &capacities,
 }
 
 // Explain obj_prime_2 as the derivative of the above so that we can annul the first derivative through use of Newton's Method.
+// Redo things to include a custom Newton iterator and driver for annuling the derivative of the convex combination.
