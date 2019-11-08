@@ -16,7 +16,7 @@ Returns a pair containing a vector of flow values and a waiting time scalar.
 
 This model comes from the linear program formulation of the common line problem, which can be solved using a Dijkstra-like label setting algorithm. This must be done separately for every sink node, but each of these problems is independent and may be parallelized. The final result is the sum of these individual results.
 */
-pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet, vector<double> &arc_costs)
+pair<vector<double>, double> ConstantAssignment::calculate(const vector<int> &fleet, const vector<double> &arc_costs)
 {
 	// Generate a vector of line frequencies based on the fleet sizes
 	vector<double> line_freq(Net->lines.size());
@@ -60,7 +60,7 @@ The flow vector and waiting time are passed by reference and automatically incre
 
 The algorithm here solves the constant-cost, single-destination version of the common lines problem, which is a LP similar to min-cost flow and is solvable with a Dijkstra-like label setting algorithm. This process can be parallelized over all destinations, and so should rely only on local variables.
 */
-void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, vector<double> &freq, vector<double> &arc_costs, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
+void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, const vector<double> &freq, const vector<double> &arc_costs, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
 {
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
@@ -298,8 +298,11 @@ The overall process being used here is the Frank-Wolfe algorithm, which iterativ
 */
 pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, pair<vector<double>, double> initial_sol)
 {
-	// Create copy of flow/waiting pair
-	pair<vector<double>, double> sol_pair = initial_sol;
+	// Initialize variables
+	pair<vector<double>, double> sol_pair = initial_sol; // flow/waiting pair for current solution
+	vector<double> arc_costs(Net->core_arcs.size()); // arc costs based on current flow
+	int iteration = 0; // current iteration number
+	double error = INFINITY; // current solution error bound
 
 	// Calculate line arc capacities
 	vector<double> capacities(Net->core_arcs.size(), INFINITY);
@@ -308,17 +311,40 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
 	});
 
-	// Calculate all arc costs based on the current flow
-	vector<double> arc_costs(Net->core_arcs.size());
-	for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
-	{
-		arc_costs[a->id] = arc_cost(a->id, sol_pair.first[a->id], capacities[a->id]);
-	});
+	// Main Frank-Wolfe loop
 
-	////////////////////////////////////////////////////////////////
-	/////////////////////// For now, just directly call the nonlinear model.
-	////////////////////////////////////////////////////////////////
-	sol_pair = Submodel->calculate(fleet, arc_costs);
+	cout << "\n========================================\n\n";
+	///////////////////////////////////while (iteration < max_iterations && error > error_tol)
+	while (iteration < 1) /////////////////////// temporary measure to prevent multiple loops
+	{
+		// Loop continues until achieving sufficiently low error or reaching an iteration cutoff
+		iteration++;
+
+		cout << "----------------------------------------" << endl;
+		cout << "Frank-Wolfe algorithm iteration " << iteration << endl << endl;
+
+		// Update all arc costs based on the current flow
+		for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
+		{
+			arc_costs[a->id] = arc_cost(a->id, sol_pair.first[a->id], capacities[a->id]);
+		});
+
+		////////////////////////////////////////////////////////////////
+		/////////////////////// For now, just directly call the nonlinear model.
+		////////////////////////////////////////////////////////////////
+		sol_pair = Submodel->calculate(fleet, arc_costs);
+
+		//////////////// Newton-Raphson for convex combo, deal with cases outside of [0,1] (>1 indicates to break and end with current solution, <0 indicates to move directly to the new solution)
+
+		cout << endl;///////////////////////
+	}
+
+	cout << "\n========================================\n";
+	cout << "Frank-Wolfe ended." << endl;
+	if (error <= error_tol)
+		cout << "Error bound achieved at " << error << endl;
+	else
+		cout << "Iteration cutoff reached at " << iteration << " with error " << error << endl;
 
 
 
@@ -386,7 +412,7 @@ Returns the scalar value of the convex combination of the objectives.
 
 To explain, the optimal step size in Frank-Wolfe is determined by finding the convex combination of the previous and next solutions that minimize the objective. Because the objective is convex, this can be accomplished by simply finding the convex parameter that annuls the derivative of the objective, which is what this function is.
 */
-double NonlinearAssignment::obj_prime(double lambda, vector<double> &capacities, vector<double> &flows_old, double &waiting_old, vector<double> &flows_new, double &waiting_new)
+double NonlinearAssignment::obj_prime(double lambda, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
 {
 	// Calculate convex combination term-by-term
 	double total = waiting_new - waiting_old;
@@ -397,7 +423,7 @@ double NonlinearAssignment::obj_prime(double lambda, vector<double> &capacities,
 }
 
 /// Derivative of the above function for use in the Newton-Raphson method.
-double NonlinearAssignment::obj_prime_2(double lambda, vector<double> &capacities, vector<double> &flows_old, double &waiting_old, vector<double> &flows_new, double &waiting_new)
+double NonlinearAssignment::obj_prime_2(double lambda, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
 {
 	// Calculate convex combination derivative term-by-term
 	double total = 0.0;
@@ -405,4 +431,66 @@ double NonlinearAssignment::obj_prime_2(double lambda, vector<double> &capacitie
 		total += pow((flows_new[i] - flows_old[i]), 2)*arc_cost_prime(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
 
 	return total;
+}
+
+/**
+Conducts the line search to minimize the objective of the convex combination of previous and next solutions.
+
+Requires the current iteration number, followed by references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
+
+The line search is conducted by using the Newton-Raphson method to annul the derivative of the objective. If this process fails to converge quickly enough, we default to the method of successive averages.
+
+Note that it is possible for this process to result in a convex parameter outside of the interval [0,1]. This event is handled in the main nonlinear model loop.
+*/
+double NonlinearAssignment::line_search(int iteration, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
+{
+	int n = 0; // internal iteration count
+	double err = INFINITY; // internal error value
+	double lambda = 1 - (1 / (iteration + 1)); // initial convex parameter
+	double lambda_next; // updated convex parameter (for comparison between iterations)
+
+	// Main Newton-Raphson loop
+	while (n < root_max_iterations && err > root_error_tol)
+	{
+		n++;
+
+		// Conduct one Newton-Raphson iteration
+		lambda_next = newton_iteration(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new);
+
+		// If no change, output current solution
+		if (lambda_next == lambda)
+			break;
+
+		// Otherwise, update the variable and recalculate the error
+		lambda = lambda_next;
+		err = INFINITY;//////////////////////////////////////
+
+		// If we're about to end due to iteration cutoff, default to method of successive averages
+		if (n >= root_max_iterations && err > root_error_tol)
+			lambda = 1 - (1 / (iteration + 1));
+	}
+
+	return lambda;
+}
+
+/**
+Conducts one iteration of the Newton-Raphson method for finding a root of the above obj_prime function with respect to the convex parameter.
+
+Requires a value for the convex parameter, followed by references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
+
+Returns the convex parameter value resulting from one Newton-Raphson iteration.
+*/
+double NonlinearAssignment::newton_iteration(double lambda, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
+{
+	// Get numerator and denominator of Newton-Raphson update
+	double f = obj_prime(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new);
+	double fp = obj_prime_2(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new);
+
+	// Main calculation
+	if (abs(fp) < EPSILON)
+		// If the derivative is small enough, simply return the initial input
+		return lambda;
+	else
+		// Otherwise return the Newton-Raphson update
+		return lambda - (f / fp);
 }

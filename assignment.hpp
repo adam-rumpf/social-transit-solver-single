@@ -18,6 +18,9 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 #include <vector>
 #include "network.hpp"
 
+// Other technical definitions
+#define EPSILON 0.00000001 // very small positive value
+
 using namespace std;
 using namespace concurrency;
 
@@ -38,8 +41,8 @@ struct ConstantAssignment
 
 	// Public methods
 	ConstantAssignment(Network *); // constructor sets network pointer
-	pair<vector<double>, double> calculate(vector<int> &, vector<double> &); // calculates flow vector for a given fleet vector and arc cost vector
-	void flows_to_destination(int, vector<double> &, double &, vector<double> &, vector<double> &, reader_writer_lock &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
+	pair<vector<double>, double> calculate(const vector<int> &, const vector<double> &); // calculates flow vector for a given fleet vector and arc cost vector
+	void flows_to_destination(int, vector<double> &, double &, const vector<double> &, const vector<double> &, reader_writer_lock &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
 };
 
 /**
@@ -66,6 +69,8 @@ struct NonlinearAssignment
 	pair<vector<double>, double> calculate(vector<int> &, pair<vector<double>, double>); // calculates flow vector for a given fleet vector and initial assignment model solution
 	double arc_cost(int, double, double); // calculates the nonlinear cost function for a given arc
 	double arc_cost_prime(int, double, double); // first derivative of arc cost function
-	double obj_prime(double, vector<double> &, vector<double> &, double &, vector<double> &, double &); // convex combination of nonlinear objective's previous and next solutions
-	double obj_prime_2(double, vector<double> &, vector<double> &, double &, vector<double> &, double &); // derivative of convex combination of nonlinear objective's previous and next solutions
+	double obj_prime(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // convex combination of nonlinear objective's previous and next solutions
+	double obj_prime_2(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // derivative of convex combination of nonlinear objective's previous and next solutions
+	double line_search(int, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // finds the convex combination of the previous and next solutions which minimizes the objective
+	double newton_iteration(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // conducts one iteration of the Newton-Raphson method for the line search
 };
