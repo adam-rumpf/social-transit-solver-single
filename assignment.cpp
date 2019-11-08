@@ -383,12 +383,20 @@ To explain, the optimal step size in Frank-Wolfe is determined by finding the co
 double NonlinearAssignment::obj_prime(double lambda, vector<double> &capacities, vector<double> &flows_old, double &waiting_old, vector<double> &flows_new, double &waiting_new)
 {
 	// Calculate convex combination term-by-term
-	double combo = waiting_new - waiting_old;
+	double total = waiting_new - waiting_old;
 	for (int i = 0; i < Net->core_arcs.size(); i++)
-		combo += (flows_new[i] - flows_old[i])*arc_cost(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
+		total += (flows_new[i] - flows_old[i])*arc_cost(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
 
-	return combo;
+	return total;
 }
 
-// Explain obj_prime_2 as the derivative of the above so that we can annul the first derivative through use of Newton's Method.
-// Redo things to include a custom Newton iterator and driver for annuling the derivative of the convex combination.
+/// Derivative of the above function for use in annuling the objective derivative by means of Newton's method (which requires a derivative).
+double NonlinearAssignment::obj_prime_2(double lambda, vector<double> &capacities, vector<double> &flows_old, double &waiting_old, vector<double> &flows_new, double &waiting_new)
+{
+	// Calculate convex combination derivative term-by-term
+	double total = 0.0;
+	for (int i = 0; i < Net->core_arcs.size(); i++)
+		total += (flows_new[i] - pow(flows_old[i], 2))*arc_cost_prime(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
+
+	return total;
+}
