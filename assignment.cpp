@@ -322,6 +322,8 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	/////////////////////// For now, just directly call the nonlinear model.
 	////////////////////////////////////////////////////////////////
 	sub_pair = Submodel->calculate(fleet, arc_costs);
+	flows = sub_pair.first;
+	waiting = sub_pair.second;
 
 
 
@@ -360,8 +362,8 @@ double NonlinearAssignment::arc_cost(int id, double flow, double capacity)
 		c(x) = c * (2 + sqrt((alpha * (1 - x/u))^2 + beta^2) - alpha * (1 - x/u) - beta)
 	where c(x) is the nonlinear cost, x is the arc's flow, c is the arc's base cost, u is the arc's capacity, and alpha and beta are parameters.
 	*/
-	double ratio = 1 - flow / capacity;
-	return Net->core_arcs[id]->cost * (2 + sqrt(pow(conical_alpha*ratio, 2) + pow(conical_beta, 2)) - conical_alpha * ratio - conical_beta);
+	double ratio = 1 - (flow / capacity);
+	return Net->core_arcs[id]->cost * (2 + sqrt(pow(conical_alpha*ratio, 2) + pow(conical_beta, 2)) - (conical_alpha * ratio) - conical_beta);
 }
 
 /// First derivative (with respect to flow) of the above nonlinear arc cost function. This is required for solving the linearized model within the Frank-Wolfe algorithm.
@@ -373,11 +375,11 @@ double NonlinearAssignment::arc_cost_prime(int id, double flow, double capacity)
 
 	// Return zero for infinite-capacity or zero-flow arcs
 	if (capacity >= INFINITY || flow == 0)
-		return 0.0;
+		return 0;
 
 	// Otherwise, return the derivative of the above conical congestion function
-	double ratio = 1 - flow / capacity;
-	return Net->core_arcs[id]->cost*(-(ratio*(pow(conical_alpha, 2))) / (capacity*sqrt(pow(ratio*conical_alpha, 2) + pow(conical_beta, 2))) + conical_alpha / capacity);
+	double ratio = 1 - (flow / capacity);
+	return Net->core_arcs[id]->cost*(-(ratio*(pow(conical_alpha, 2))) / (capacity*sqrt(pow(ratio*conical_alpha, 2) + pow(conical_beta, 2))) + (conical_alpha / capacity));
 }
 
 /**
@@ -399,13 +401,13 @@ double NonlinearAssignment::obj_prime(double lambda, vector<double> &capacities,
 	return total;
 }
 
-/// Derivative of the above function for use in annuling the objective derivative by means of Newton's method (which requires a derivative).
+/// Derivative of the above function for use in the Newton-Raphson method.
 double NonlinearAssignment::obj_prime_2(double lambda, vector<double> &capacities, vector<double> &flows_old, double &waiting_old, vector<double> &flows_new, double &waiting_new)
 {
 	// Calculate convex combination derivative term-by-term
 	double total = 0.0;
 	for (int i = 0; i < Net->core_arcs.size(); i++)
-		total += (flows_new[i] - pow(flows_old[i], 2))*arc_cost_prime(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
+		total += pow((flows_new[i] - flows_old[i]), 2)*arc_cost_prime(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
 
 	return total;
 }
