@@ -12,8 +12,8 @@ Includes a variety of functions for calculating the constraint function values f
 #include <string>
 #include <utility>
 #include <vector>
-#include "network.h"
-#include "assignment.h"
+#include "network.hpp"
+#include "assignment.hpp"
 
 using namespace std;
 

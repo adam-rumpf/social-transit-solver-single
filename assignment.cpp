@@ -1,4 +1,4 @@
-#include "assignment.h"
+#include "assignment.hpp"
 
 /// Constant-cost assignment constructor sets network pointer.
 ConstantAssignment::ConstantAssignment(Network * net_in)

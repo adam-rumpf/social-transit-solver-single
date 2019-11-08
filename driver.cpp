@@ -13,9 +13,9 @@ To Do:
 #include <ctime>
 #include <iomanip>
 #include <iostream>
-#include "network.h"
-#include "objective.h"
-#include "constraints.h"
+#include "network.hpp"
+#include "objective.hpp"
+#include "constraints.hpp"
 
 // Define input file names
 #define NODE_FILE "data/node_data.txt"

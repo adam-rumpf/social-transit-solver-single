@@ -1,4 +1,4 @@
-#include "objective.h"
+#include "objective.hpp"
 
 /**
 Objective object constructor that loads objective file input and sets a network object pointer.

@@ -1,4 +1,4 @@
-#include "constraints.h"
+#include "constraints.hpp"
 
 /**
 Constraint object constructor that loads constraint file input and sets a network object pointer.
