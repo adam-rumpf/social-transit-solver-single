@@ -298,11 +298,8 @@ The overall process being used here is the Frank-Wolfe algorithm, which iterativ
 */
 pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, pair<vector<double>, double> initial_sol)
 {
-	pair<vector<double>, double> sub_pair; // containder to get submodel solution output
-
-	// Get initial solution
-	vector<double> flows = initial_sol.first;
-	double waiting = initial_sol.second;
+	// Create copy of flow/waiting pair
+	pair<vector<double>, double> sol_pair = initial_sol;
 
 	// Calculate line arc capacities
 	vector<double> capacities(Net->core_arcs.size(), INFINITY);
@@ -315,15 +312,13 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	vector<double> arc_costs(Net->core_arcs.size());
 	for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
 	{
-		arc_costs[a->id] = arc_cost(a->id, flows[a->id], capacities[a->id]);
+		arc_costs[a->id] = arc_cost(a->id, sol_pair.first[a->id], capacities[a->id]);
 	});
 
 	////////////////////////////////////////////////////////////////
 	/////////////////////// For now, just directly call the nonlinear model.
 	////////////////////////////////////////////////////////////////
-	sub_pair = Submodel->calculate(fleet, arc_costs);
-	flows = sub_pair.first;
-	waiting = sub_pair.second;
+	sol_pair = Submodel->calculate(fleet, arc_costs);
 
 
 
@@ -333,7 +328,7 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 
 
 	////////////////////////////
-	return make_pair(flows, waiting);
+	return sol_pair;
 
 	//////////////////////////////////// Allow the nonlinear solver object to remember flow vectors between iterations for use as an initial guess. The waiting time will always need to be an upper bound for the waiting time constraints, so we can begin each iteration by calculating a generous bound for it (possibly the sum of the largest possible waiting time at each stop, or the longest waiting time [from min nonzero frequency] times the total system demand [which is constant and can be remembered])
 	//////////////////////////////// The capacity vector should also be remembered in order to avoid repeatedly having to reallocate space.
