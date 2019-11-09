@@ -32,14 +32,16 @@ To Do:
 // Define output file names
 #define METRIC_FILE "output/gravity_metrics.txt"
 #define SOLUTION_LOG_FILE "output/initial_solution_log.txt"
+#define FLOW_FILE "output/initial_flows.txt"
 
 using namespace std;
 
 // Function prototypes
 vector<int> read_fleets(string); // reads in initial fleet sizes
-void record_metrics(vector<double> &); // writes accessibility metrics to an output file
-void solution_log(vector<int> &, vector<double> &); // generates the initial row for the solution log given the solution vector and the element vector
-string solution_string(vector<int> &); // converts a solution vector to a string
+void record_metrics(const vector<double> &); // writes accessibility metrics to an output file
+void record_flows(Constraint *); // writes flow vector to an output file
+void solution_log(const vector<int> &, const vector<double> &); // generates the initial row for the solution log given the solution vector and the element vector
+string solution_string(const vector<int> &); // converts a solution vector to a string
 
 /// Main driver.
 int main()
@@ -89,6 +91,9 @@ int main()
 
 	// Write solution log row to file
 	solution_log(fleets, solution_log_row);
+
+	// Write flows to file
+	record_flows(Con);
 	
 	cin.get();////////////////////////// Remove later.
 
@@ -146,7 +151,7 @@ vector<int> read_fleets(string transit_file_name)
 }
 
 /// Records vector of accessibility metrics to an output file.
-void record_metrics(vector<double> &metrics)
+void record_metrics(const vector<double> &metrics)
 {
 	ofstream out_file(METRIC_FILE);
 
@@ -162,13 +167,37 @@ void record_metrics(vector<double> &metrics)
 			out_file << i + 1 << '\t' << metrics[i] << endl;
 
 		out_file.close();
+		cout << "Successfuly recorded metrics!" << endl;
 	}
 	else
 		cout << "Metric file failed to open." << endl;
 }
 
+/// Records vector of core arc flows to an output file. Requires a reference to the Constraint object, which contains a flow vector.
+void record_flows(Constraint * Con)
+{
+	ofstream out_file(FLOW_FILE);
+
+	if (out_file.is_open())
+	{
+		cout << "Writing flows to output file..." << endl;
+
+		// Write comment line
+		out_file << "ID\tFlow" << fixed << setprecision(15) << endl;
+
+		// Write all flows
+		for (int i = 0; i < Con->Net->core_arcs.size(); i++)
+			out_file << Con->Net->core_arcs[i]->id << '\t' << Con->sol_pair.first[i] << endl;
+
+		out_file.close();
+		cout << "Successfully recorded flows!" << endl;
+	}
+	else
+		cout << "Flow file failed to open." << endl;
+}
+
 /// Records the initial row of the solution log.
-void solution_log(vector<int> &sol, vector<double> &row)
+void solution_log(const vector<int> &sol, const vector<double> &row)
 {
 	ofstream log_file(SOLUTION_LOG_FILE);
 
@@ -194,7 +223,7 @@ void solution_log(vector<int> &sol, vector<double> &row)
 }
 
 /// Converts a solution vector to a string by simply concatenating its digits separated by underscores.
-string solution_string(vector<int> &sol)
+string solution_string(const vector<int> &sol)
 {
 	string out = "";
 

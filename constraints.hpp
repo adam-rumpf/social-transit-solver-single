@@ -31,8 +31,7 @@ struct Constraint
 	// Public attributes
 	Network * Net; // pointer to the main transit network object
 	NonlinearAssignment * Assignment; // pointer to the assignment model object
-	vector<double> flows; // flow vector produced by assignment model (and used as the initial guess for future iterations)
-	double waiting = 0.0; // waiting time produced by assignment model (and used as the initial guess for future iterations)
+	pair<vector<double>, double> sol_pair; // flow vector/waiting time pair produced by assignment model
 	double initial_user_cost; // initial user cost for use in determining the user cost upper bound
 	double uc_percent_increase; // allowed percent increase in user cost function
 	double riding_weight; // user cost weight for in-vehicle travel time

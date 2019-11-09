@@ -9,7 +9,7 @@ Constraint::Constraint(string us_file_name, string op_file_name, string assignme
 {
 	Net = net_in;
 	stop_size = Net->stop_nodes.size();
-	flows.resize(Net->core_arcs.size(), 0.0);
+	sol_pair.first.resize(Net->core_arcs.size(), 0.0);
 
 	// Initialize assignment model object
 	Assignment = new NonlinearAssignment(assignment_file_name, net_in);
@@ -73,7 +73,7 @@ All of the constraint functions are evaluated using either the solution vector d
 pair<int, vector<double>> Constraint::calculate(vector<int> &sol)
 {
 	// Feed solution to assignment model to calculate flow vector
-	make_pair(flows, waiting) = Assignment->calculate(sol, make_pair(flows, waiting));
+	sol_pair = Assignment->calculate(sol, sol_pair);
 
 	// Calculate user cost components
 	vector<double> ucc = user_cost_components();
@@ -95,15 +95,15 @@ Returns a vector of the user cost components, in the order of the solution log c
 vector<double> Constraint::user_cost_components()
 {
 	vector<double> uc(3, 0);
-	uc[2] = waiting;
+	uc[2] = sol_pair.second;
 
 	// In-vehicle riding time
 	for (int i = 0; i < Net->line_arcs.size(); i++)
-		uc[0] += flows[Net->line_arcs[i]->id] * Net->line_arcs[i]->cost;
+		uc[0] += sol_pair.first[Net->line_arcs[i]->id] * Net->line_arcs[i]->cost;
 
 	// Walking time
 	for (int i = 0; i < Net->walking_arcs.size(); i++)
-		uc[1] += flows[Net->walking_arcs[i]->id] * Net->walking_arcs[i]->cost;
+		uc[1] += sol_pair.first[Net->walking_arcs[i]->id] * Net->walking_arcs[i]->cost;
 
 	return uc;
 }
