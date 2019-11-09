@@ -73,4 +73,5 @@ struct NonlinearAssignment
 	double obj_prime_2(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // derivative of convex combination of nonlinear objective's previous and next solutions
 	double line_search(int, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // finds the convex combination of the previous and next solutions which minimizes the objective
 	double newton_iteration(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // conducts one iteration of the Newton-Raphson method for the line search
+	double obj_error(const vector<double> &, const vector<double> &, double, const vector<double> &, double); // calculates an error bound for the current objective value
 };

@@ -299,7 +299,8 @@ The overall process being used here is the Frank-Wolfe algorithm, which iterativ
 pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, pair<vector<double>, double> initial_sol)
 {
 	// Initialize variables
-	pair<vector<double>, double> sol_pair = initial_sol; // flow/waiting pair for current solution
+	pair<vector<double>, double> sol_current = initial_sol; // flow/waiting pair for current solution
+	pair<vector<double>, double> sol_previous = initial_sol; // flow/waiting pair for the previous solution
 	vector<double> arc_costs(Net->core_arcs.size()); // arc costs based on current flow
 	int iteration = 0; // current iteration number
 	double error = INFINITY; // current solution error bound
@@ -311,11 +312,21 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
 	});
 
+	////////////////////////////////////
+	cout << "Initial flows:" << endl;
+	for (int i = 0; i < Net->core_arcs.size(); i++)
+		cout << sol_current.first[i] << endl;
+
+	////////////////////////////////////
+	cout << "Initial arc costs:" << endl;
+	for (int i = 0; i < Net->core_arcs.size(); i++)
+		cout << Net->core_arcs[i]->cost << endl;
+
 	// Main Frank-Wolfe loop
 
 	cout << "\n========================================\n\n";
 	///////////////////////////////////while (iteration < max_iterations && error > error_tol)
-	while (iteration < 1) /////////////////////// temporary measure to prevent multiple loops
+	while (iteration < 2) /////////////////////// temporary measure to prevent multiple loops
 	{
 		// Loop continues until achieving sufficiently low error or reaching an iteration cutoff
 		iteration++;
@@ -326,15 +337,50 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		// Update all arc costs based on the current flow
 		for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
 		{
-			arc_costs[a->id] = arc_cost(a->id, sol_pair.first[a->id], capacities[a->id]);
+			arc_costs[a->id] = arc_cost(a->id, sol_current.first[a->id], capacities[a->id]);
 		});
 
-		////////////////////////////////////////////////////////////////
-		/////////////////////// For now, just directly call the nonlinear model.
-		////////////////////////////////////////////////////////////////
-		sol_pair = Submodel->calculate(fleet, arc_costs);
+		// Solve constant-cost model for given cost vector
+		sol_current = Submodel->calculate(fleet, arc_costs);
 
-		//////////////// Newton-Raphson for convex combo, deal with cases outside of [0,1] (>1 indicates to break and end with current solution, <0 indicates to move directly to the new solution)
+		// Calculate new error bound
+		error = obj_error(capacities, sol_previous.first, sol_previous.second, sol_current.first, sol_current.second);
+		cout << "Current error bound = " << error << endl;
+
+		// Conduct line search
+		double lambda = line_search(iteration, capacities, sol_previous.first, sol_previous.second, sol_current.first, sol_current.second);
+		cout << "lambda = " << lambda << endl;
+
+		// Handle convex combinations outside of [0,1]
+		if (lambda >= 1.0)
+		{
+			// lambda = 1 corresponds to purely the previous solution
+			sol_current = sol_previous;
+			error = 0.0;
+			break;
+		}
+		if (lambda <= 0.0)
+		{
+			// lambda = 0 corresponds to purely the next solution
+			lambda = 0.0;
+		}
+
+		// Update solution
+		sol_previous = sol_current;
+		////////////////////////////////////////////////////////////////////////
+		////////////////////////////// Write a method that accepts a reference to the solution pair and updates each element as a convex combination
+		////////////////////////////// Use that to update sol_current, but not before setting sol_previous to sol_current
+		////////////////////// Also output the total cost to cout for reference so that we know what would be a reasonable optimality bound to expect
+
+		////////////////////////////////////
+		cout << "Current flows:" << endl;
+		for (int i = 0; i < Net->core_arcs.size(); i++)
+			cout << sol_current.first[i] << endl;
+
+		////////////////////////////////////
+		cout << "Current arc costs:" << endl;
+		for (int i = 0; i < Net->core_arcs.size(); i++)
+			cout << arc_costs[i] << endl;/////////////////////////////////////////// There seems to be an error, since these are exactly the base arc costs, and thus we get exactly the same solution in each iteration. This could just be because of this test network having very generous capacities which result in exactly the same flows. Try reducing the vehicle capacities or try a different test network.
 
 		cout << endl;///////////////////////
 	}
@@ -354,7 +400,7 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 
 
 	////////////////////////////
-	return sol_pair;
+	return sol_current;
 
 	//////////////////////////////////// Allow the nonlinear solver object to remember flow vectors between iterations for use as an initial guess. The waiting time will always need to be an upper bound for the waiting time constraints, so we can begin each iteration by calculating a generous bound for it (possibly the sum of the largest possible waiting time at each stop, or the longest waiting time [from min nonzero frequency] times the total system demand [which is constant and can be remembered])
 	//////////////////////////////// The capacity vector should also be remembered in order to avoid repeatedly having to reallocate space.
@@ -444,10 +490,26 @@ Note that it is possible for this process to result in a convex parameter outsid
 */
 double NonlinearAssignment::line_search(int iteration, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
 {
+	// Initialize variables
 	int n = 0; // internal iteration count
-	double err = INFINITY; // internal error value
+	double err = INFINITY; // internal error value (current function absolute value)
 	double lambda = 1 - (1 / (iteration + 1)); // initial convex parameter
 	double lambda_next; // updated convex parameter (for comparison between iterations)
+	double f0, f1; // initial function values for endpoints
+
+	// Check signs of endpoints, since if they are the same the root cannot lie on the interval [0,1] (which we handle in the main nonlinear model loop)
+	f0 = obj_prime(0.0, capacities, flows_old, waiting_old, flows_new, waiting_new);
+	f1 = obj_prime(1.0, capacities, flows_old, waiting_old, flows_new, waiting_new);
+	if (f0 > 0 && f1 > 0)
+	{
+		lambda = -INFINITY;
+		root_error_tol = 0;
+	}
+	if (f0 < 0 && f1 < 0)
+	{
+		lambda = INFINITY;
+		root_error_tol = 0;
+	}
 
 	// Main Newton-Raphson loop
 	while (n < root_max_iterations && err > root_error_tol)
@@ -463,7 +525,7 @@ double NonlinearAssignment::line_search(int iteration, const vector<double> &cap
 
 		// Otherwise, update the variable and recalculate the error
 		lambda = lambda_next;
-		err = INFINITY;//////////////////////////////////////
+		err = abs(obj_prime(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new));
 
 		// If we're about to end due to iteration cutoff, default to method of successive averages
 		if (n >= root_max_iterations && err > root_error_tol)
@@ -493,4 +555,23 @@ double NonlinearAssignment::newton_iteration(double lambda, const vector<double>
 	else
 		// Otherwise return the Newton-Raphson update
 		return lambda - (f / fp);
+}
+
+/**
+Calculates an error bound for the current objective value based on the difference between consecutive solutions.
+
+Requires references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
+
+Returns an upper bound for the absolute error in the current solution.
+
+The Frank-Wolfe algorithm includes a means for bounding the absolute error of the current solution based on the objective values of the previous solutions. Since our algorithm never explicitly evaluates the objective value (only values of the linearized objective), we instead use a looser but more easily calculated bound that involves the difference between consecutive linearized objective values.
+*/
+double NonlinearAssignment::obj_error(const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
+{
+	// Calculate error term-by-term
+	double total = waiting_old - waiting_new;
+	for (int i = 0; i < Net->core_arcs.size(); i++)
+		total += arc_cost(Net->core_arcs[i]->id, flows_old[i], capacities[i]) * (flows_old[i] - flows_new[i]);
+
+	return abs(total);
 }
