@@ -501,12 +501,12 @@ double NonlinearAssignment::line_search(int iteration, const vector<double> &cap
 	if ((f0 > 0) && (f1 > 0))
 	{
 		lambda = -1;
-		root_error_tol = 0;
+		err = 0;
 	}
 	if ((f0 < 0) && (f1 < 0))
 	{
 		lambda = 2;
-		root_error_tol = 0;
+		err = 0;
 	}
 
 	// Main Newton-Raphson loop
@@ -526,7 +526,7 @@ double NonlinearAssignment::line_search(int iteration, const vector<double> &cap
 		err = abs(obj_prime(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new));
 
 		// If we're about to end due to iteration cutoff, default to method of successive averages
-		if (n >= root_max_iterations && err > root_error_tol)
+		if ((n >= root_max_iterations) && (err > root_error_tol))
 			lambda = 1 - (1.0 / (iteration + 1));
 	}
 
