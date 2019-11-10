@@ -4,12 +4,6 @@ Main driver of the initial objective/constraint evaluation.
 Contains the main function, which handles reading in the data, constructing the network, and calling the objective and constraint functions.
 */
 
-/*
-To Do:
--Implement keyboard stop.
--Implement email reports and attachments.
-*/
-
 #include <ctime>
 #include <iomanip>
 #include <iostream>

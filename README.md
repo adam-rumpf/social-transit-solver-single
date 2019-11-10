@@ -61,7 +61,8 @@ Information related to the Spiess and Florian assignment model.
 
 Contains the following rows:
 
-* `FW_Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
+* `FW_Error_Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
+* `FW_Change_Epsilon`: Solution change threshold (inf-norm) to use for ending the Frank-Wolfe algorithm.
 * `FW_Cutoff`: Iteration cutoff for the Frank-Wolfe algorithm.
 * `NR_Epsilon`: Function value threshold to use for ending the Newton-Raphson root finding method.
 * `NR_Cutoff`: Iteration cutoff for the Newton-Raphson method.

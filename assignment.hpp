@@ -58,6 +58,7 @@ struct NonlinearAssignment
 	Network * Net; // pointer to network object
 	ConstantAssignment * Submodel; // pointer to constant-cost submodel
 	double error_tol; // error bound cutoff for Frank-Wolfe
+	double change_tol; // solution vector change cutoff for Frank-Wolfe
 	int max_iterations; // iteration cutoff for Frank-Wolfe
 	double root_error_tol; // function value cutoff for root finding
 	int root_max_iterations; // iteration cutoff for root finding
@@ -74,4 +75,5 @@ struct NonlinearAssignment
 	double line_search(int, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // finds the convex combination of the previous and next solutions which minimizes the objective
 	double newton_iteration(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // conducts one iteration of the Newton-Raphson method for the line search
 	double obj_error(const vector<double> &, const vector<double> &, double, const vector<double> &, double); // calculates an error bound for the current objective value
+	double solution_update(double, vector<double> &, double &, const vector<double> &, double); // updates current solution as a convex combination of the previous and next solutions, and outputs the maximum elementwise difference
 };
