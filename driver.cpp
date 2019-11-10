@@ -72,9 +72,14 @@ int main()
 	con_time = (1.0*clock() - timer) / CLOCKS_PER_SEC;
 	cout << "\nConstraint calculation took " << con_time << " seconds." << endl;
 	cout << "Initial user cost terms: ";
+	double tot = 0.0;
 	for (int i = 0; i < initial_user_costs.size(); i++)
+	{
+		tot += initial_user_costs[i];
 		cout << initial_user_costs[i] << ' ';
+	}
 	cout << endl;
+	cout << "Total: " << tot << endl;
 
 	// Assemble solution log row
 	for (int i = 0; i < initial_user_costs.size(); i++)

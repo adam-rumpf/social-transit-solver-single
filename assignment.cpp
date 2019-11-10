@@ -43,10 +43,9 @@ pair<vector<double>, double> ConstantAssignment::calculate(const vector<int> &fl
 	parallel_for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
 	{
 		cout << '*'; // shows progress
-		flows_to_destination(s->id, flows, waiting, freq, arc_costs, flow_lock, wait_lock);
+		flows_to_destination(s->id, flows, waiting, freq, arc_costs, &flow_lock, &wait_lock);
 	});
 	cout << '|' << endl;
-	cout << "Total waiting time: " << waiting << endl;
 
 	return make_pair(flows, waiting);
 }
@@ -54,13 +53,13 @@ pair<vector<double>, double> ConstantAssignment::calculate(const vector<int> &fl
 /**
 Calculates the flow vector to a given sink.
 
-Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc cost vector, arc flow reader/writer lock, and waiting time reader/writer lock.
+Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc cost vector, and pointers to the arc flow reader/writer lock and waiting time reader/writer lock, respectively.
 
 The flow vector and waiting time are passed by reference and automatically incremented according to the results of this function.
 
 The algorithm here solves the constant-cost, single-destination version of the common lines problem, which is a LP similar to min-cost flow and is solvable with a Dijkstra-like label setting algorithm. This process can be parallelized over all destinations, and so should rely only on local variables.
 */
-void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, const vector<double> &freq, const vector<double> &arc_costs, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
+void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, const vector<double> &freq, const vector<double> &arc_costs, reader_writer_lock *flow_lock, reader_writer_lock *wait_lock)
 {
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
@@ -212,7 +211,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		total_wait += node_wait[i];
 
 	// Process nonzero flow queue while reader/writer lock is engaged
-	flow_lock.lock();
+	flow_lock->lock();
 	while (nonzero_flows.empty() == false)
 	{
 		chosen_arc = nonzero_flows.top().second;
@@ -220,12 +219,12 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		flows[chosen_arc] += added_flow; // apply nonzero flow increase from stack
 		nonzero_flows.pop();
 	}
-	flow_lock.unlock();
+	flow_lock->unlock();
 
 	// Increment total waiting time while reader/writer lock is engaged
-	wait_lock.lock();
+	wait_lock->lock();
 	waiting += total_wait;
-	wait_lock.unlock();
+	wait_lock->unlock();
 }
 
 /// Nonlinear assignment constructor reads in model data from file and sets network pointer.
@@ -317,14 +316,14 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	});
 
 	////////////////////////////////////
-	cout << "Initial flows:" << endl;
-	for (int i = 0; i < Net->core_arcs.size(); i++)
-		cout << sol_previous.first[i] << endl;
+	/*cout << "Initial flows:" << endl;
+	for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
+		cout << sol_previous.first[i] << endl;*/
 
 	////////////////////////////////////
-	cout << "Base arc costs:" << endl;
-	for (int i = 0; i < Net->core_arcs.size(); i++)
-		cout << Net->core_arcs[i]->cost << endl;
+	/*cout << "Base arc costs:" << endl;
+	for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
+		cout << Net->core_arcs[i]->cost << endl;*/
 
 	// Main Frank-Wolfe loop
 
@@ -344,10 +343,10 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		});
 
 		////////////////////////////////////
-		cout << "Current arc costs:" << endl;
-		for (int i = 0; i < Net->core_arcs.size(); i++)
+		/*cout << "Current arc costs:" << endl;
+		for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
 			cout << arc_costs[i] << " (" << Net->core_arcs[i]->cost << ')' << endl;
-		cout << endl;
+		cout << endl;*/
 
 		// Solve constant-cost model for given cost vector
 		sol_next = Submodel->calculate(fleet, arc_costs);
@@ -369,11 +368,10 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 			error = 0.0;
 			change = 0.0;
 			////////////////////////////////////
-			cout << "\nCurrent flows:" << endl;
-			for (int i = 0; i < Net->core_arcs.size(); i++)
+			/*cout << "\nCurrent flows:" << endl;
+			for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
 				cout << sol_previous.first[i] << endl;
-
-			cout << endl;///////////////////////
+			cout << endl;///////////////////////*/
 			break;
 		}
 		if (lambda <= 0.0)
@@ -388,11 +386,10 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		cout << "Maximum change = " << change << endl;
 
 		////////////////////////////////////
-		cout << "\nCurrent flows:" << endl;
-		for (int i = 0; i < Net->core_arcs.size(); i++)
+		/*cout << "\nCurrent flows:" << endl;
+		for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
 			cout << sol_previous.first[i] << endl;
-
-		cout << endl;///////////////////////
+		cout << endl;///////////////////////*/
 	}
 
 	cout << "\n========================================\n";
@@ -508,7 +505,7 @@ double NonlinearAssignment::line_search(int iteration, const vector<double> &cap
 	}
 	if ((f0 < 0) && (f1 < 0))
 	{
-		lambda = INFINITY;
+		lambda = 2;
 		root_error_tol = 0;
 	}
 
