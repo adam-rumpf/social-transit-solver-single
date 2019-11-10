@@ -19,7 +19,7 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 #include "network.hpp"
 
 // Other technical definitions
-#define EPSILON 0.00000001 // very small positive value
+#define EPSILON 0.000001 // very small positive value
 
 using namespace std;
 using namespace concurrency;
@@ -60,8 +60,6 @@ struct NonlinearAssignment
 	double error_tol; // error bound cutoff for Frank-Wolfe
 	double change_tol; // solution vector change cutoff for Frank-Wolfe
 	int max_iterations; // iteration cutoff for Frank-Wolfe
-	double root_error_tol; // function value cutoff for root finding
-	int root_max_iterations; // iteration cutoff for root finding
 	double conical_alpha; // alpha parameter for conical congestion function
 	double conical_beta; // beta parameter for conical congestion function
 
@@ -69,11 +67,6 @@ struct NonlinearAssignment
 	NonlinearAssignment(string, Network *); // constructor reads assignment model data file and sets network pointer
 	pair<vector<double>, double> calculate(vector<int> &, pair<vector<double>, double>); // calculates flow vector for a given fleet vector and initial assignment model solution
 	double arc_cost(int, double, double); // calculates the nonlinear cost function for a given arc
-	double arc_cost_prime(int, double, double); // first derivative of arc cost function
-	double obj_prime(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // convex combination of nonlinear objective's previous and next solutions
-	double obj_prime_2(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // derivative of convex combination of nonlinear objective's previous and next solutions
-	double line_search(int, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // finds the convex combination of the previous and next solutions which minimizes the objective
-	double newton_iteration(double, const vector<double> &, const vector<double> &, double, const vector<double> &, double); // conducts one iteration of the Newton-Raphson method for the line search
 	double obj_error(const vector<double> &, const vector<double> &, double, const vector<double> &, double); // calculates an error bound for the current objective value
 	double solution_update(double, vector<double> &, double &, const vector<double> &, double); // updates current solution as a convex combination of the previous and next solutions, and outputs the maximum elementwise difference
 };

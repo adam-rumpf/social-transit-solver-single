@@ -268,13 +268,9 @@ NonlinearAssignment::NonlinearAssignment(string input_file, Network * net_in)
 				change_tol = stod(value);
 			if (count == 3)
 				max_iterations = stoi(value);
-			if (count == 4)
-				root_error_tol = stod(value);
 			if (count == 5)
-				root_max_iterations = stoi(value);
-			if (count == 7)
 				conical_alpha = stod(value);
-			if (count == 8)
+			if (count == 6)
 				conical_beta = stod(value);
 		}
 
@@ -356,33 +352,10 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		error = obj_error(capacities, sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
 		cout << "Current error bound = " << error << endl;
 
-		// Conduct line search
-		lambda = line_search(iteration, capacities, sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
-		cout << "lambda = " << lambda << endl;
+		cout << "lambda = " << 1 - (1.0 / iteration) << endl;
 
-		// Handle convex combinations outside of [0,1]
-		if (lambda >= 1.0)
-		{
-			// lambda = 1 corresponds to purely the previous solution
-			cout << "lambda reset to 1.0" << endl;
-			error = 0.0;
-			change = 0.0;
-			////////////////////////////////////
-			/*cout << "\nCurrent flows:" << endl;
-			for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
-				cout << sol_previous.first[i] << endl;
-			cout << endl;///////////////////////*/
-			break;
-		}
-		if (lambda <= 0.0)
-		{
-			// lambda = 0 corresponds to purely the next solution
-			cout << "lambda reset to 0.0" << endl;
-			lambda = 0.0;
-		}
-
-		// Update solution and get maximum elementwise difference
-		change = solution_update(lambda, sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
+		// Update solution as successive average of consecutive solutions and get maximum elementwise difference
+		change = solution_update(1 - (1.0 / iteration), sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
 		cout << "Maximum change = " << change << endl;
 
 		////////////////////////////////////
@@ -429,130 +402,6 @@ double NonlinearAssignment::arc_cost(int id, double flow, double capacity)
 	*/
 	double ratio = 1 - (flow / capacity);
 	return Net->core_arcs[id]->cost * (2 + sqrt(pow(conical_alpha*ratio, 2) + pow(conical_beta, 2)) - (conical_alpha * ratio) - conical_beta);
-}
-
-/// First derivative (with respect to flow) of the above nonlinear arc cost function. This is required for solving the linearized model within the Frank-Wolfe algorithm.
-double NonlinearAssignment::arc_cost_prime(int id, double flow, double capacity)
-{
-	// Return infinity for zero-capacity arcs
-	if (capacity == 0)
-		return INFINITY;
-
-	// Return zero for infinite-capacity or zero-flow arcs
-	if ((capacity >= INFINITY) || (flow == 0))
-		return 0;
-
-	// Otherwise, return the derivative of the above conical congestion function
-	double ratio = 1 - (flow / capacity);
-	return Net->core_arcs[id]->cost*(-(ratio*(pow(conical_alpha, 2))) / (capacity*sqrt(pow(ratio*conical_alpha, 2) + pow(conical_beta, 2))) + (conical_alpha / capacity));
-}
-
-/**
-Convex combination of the current and next (linearized) nonlinear model solutions.
-
-Requires a value for the convex parameter, followed by references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
-
-Returns the scalar value of the convex combination of the objectives.
-
-To explain, the optimal step size in Frank-Wolfe is determined by finding the convex combination of the previous and next solutions that minimize the objective. Because the objective is convex, this can be accomplished by simply finding the convex parameter that annuls the derivative of the objective, which is what this function is.
-*/
-double NonlinearAssignment::obj_prime(double lambda, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
-{
-	// Calculate convex combination term-by-term
-	double total = waiting_new - waiting_old;
-	for (int i = 0; i < Net->core_arcs.size(); i++)
-		total += (flows_new[i] - flows_old[i])*arc_cost(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
-
-	return total;
-}
-
-/// Derivative of the above function for use in the Newton-Raphson method.
-double NonlinearAssignment::obj_prime_2(double lambda, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
-{
-	// Calculate convex combination derivative term-by-term
-	double total = 0.0;
-	for (int i = 0; i < Net->core_arcs.size(); i++)
-		total += pow((flows_new[i] - flows_old[i]), 2)*arc_cost_prime(Net->core_arcs[i]->id, (1 - lambda)*flows_old[i] + lambda*flows_new[i], capacities[i]);
-
-	return total;
-}
-
-/**
-Conducts the line search to minimize the objective of the convex combination of previous and next solutions.
-
-Requires the current iteration number, followed by references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
-
-The line search is conducted by using the Newton-Raphson method to annul the derivative of the objective. If this process fails to converge quickly enough, we default to the method of successive averages.
-
-Note that it is possible for this process to result in a convex parameter outside of the interval [0,1]. This event is handled in the main nonlinear model loop.
-*/
-double NonlinearAssignment::line_search(int iteration, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
-{
-	// Initialize variables
-	int n = 0; // internal iteration count
-	double err = INFINITY; // internal error value (current function absolute value)
-	double lambda = 1 - (1.0 / (iteration + 1)); // initial convex parameter
-	double lambda_next; // updated convex parameter (for comparison between iterations)
-	double f0, f1; // initial function values for endpoints
-
-	// Check signs of endpoints, since if they are the same the root cannot lie on the interval [0,1] (which we handle in the main nonlinear model loop)
-	f0 = obj_prime(0.0, capacities, flows_old, waiting_old, flows_new, waiting_new);
-	f1 = obj_prime(1.0, capacities, flows_old, waiting_old, flows_new, waiting_new);
-	if ((f0 > 0) && (f1 > 0))
-	{
-		lambda = -1;
-		err = 0;
-	}
-	if ((f0 < 0) && (f1 < 0))
-	{
-		lambda = 2;
-		err = 0;
-	}
-
-	// Main Newton-Raphson loop
-	while ((n < root_max_iterations) && (err > root_error_tol))
-	{
-		n++;
-
-		// Conduct one Newton-Raphson iteration
-		lambda_next = newton_iteration(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new);
-
-		// If no change, output current solution
-		if (lambda_next == lambda)
-			break;
-
-		// Otherwise, update the variable and recalculate the error
-		lambda = lambda_next;
-		err = abs(obj_prime(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new));
-
-		// If we're about to end due to iteration cutoff, default to method of successive averages
-		if ((n >= root_max_iterations) && (err > root_error_tol))
-			lambda = 1 - (1.0 / (iteration + 1));
-	}
-
-	return lambda;
-}
-
-/**
-Conducts one iteration of the Newton-Raphson method for finding a root of the above obj_prime function with respect to the convex parameter.
-
-Requires a value for the convex parameter, followed by references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
-
-Returns the convex parameter value resulting from one Newton-Raphson iteration.
-*/
-double NonlinearAssignment::newton_iteration(double lambda, const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
-{
-	// Get numerator and denominator of Newton-Raphson update
-	double f = obj_prime(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new);
-	double fp = obj_prime_2(lambda, capacities, flows_old, waiting_old, flows_new, waiting_new);
-
-	// Main calculation
-	if (abs(fp) < EPSILON)
-		// If the derivative is small enough, simply return the initial input
-		return lambda;
-	else
-		// Otherwise return the Newton-Raphson update
-		return lambda - (f / fp);
 }
 
 /**
