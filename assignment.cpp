@@ -1,4 +1,4 @@
-#include "assignment.h"
+#include "assignment.hpp"
 
 /// Constant-cost assignment constructor sets network pointer.
 ConstantAssignment::ConstantAssignment(Network * net_in)
@@ -10,13 +10,13 @@ ConstantAssignment::ConstantAssignment(Network * net_in)
 /**
 Constant-cost assignment model evaluation for a given solution.
 
-Requires a fleet size vector.
+Requires a fleet size vector and nonlinear cost vector.
 
 Returns a pair containing a vector of flow values and a waiting time scalar.
 
 This model comes from the linear program formulation of the common line problem, which can be solved using a Dijkstra-like label setting algorithm. This must be done separately for every sink node, but each of these problems is independent and may be parallelized. The final result is the sum of these individual results.
 */
-pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
+pair<vector<double>, double> ConstantAssignment::calculate(const vector<int> &fleet, const vector<double> &arc_costs)
 {
 	// Generate a vector of line frequencies based on the fleet sizes
 	vector<double> line_freq(Net->lines.size());
@@ -43,10 +43,9 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 	parallel_for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
 	{
 		cout << '*'; // shows progress
-		flows_to_destination(s->id, flows, waiting, freq, flow_lock, wait_lock);
+		flows_to_destination(s->id, flows, waiting, freq, arc_costs, &flow_lock, &wait_lock);
 	});
 	cout << '|' << endl;
-	cout << "Total waiting time: " << waiting << endl;
 
 	return make_pair(flows, waiting);
 }
@@ -54,13 +53,13 @@ pair<vector<double>, double> ConstantAssignment::calculate(vector<int> &fleet)
 /**
 Calculates the flow vector to a given sink.
 
-Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc flow reader/writer lock, and waiting time reader/writer lock.
+Requires the sink index (as a position in the stop node list), flow vector, waiting time scalar, line frequency vector, arc cost vector, and pointers to the arc flow reader/writer lock and waiting time reader/writer lock, respectively.
 
 The flow vector and waiting time are passed by reference and automatically incremented according to the results of this function.
 
 The algorithm here solves the constant-cost, single-destination version of the common lines problem, which is a LP similar to min-cost flow and is solvable with a Dijkstra-like label setting algorithm. This process can be parallelized over all destinations, and so should rely only on local variables.
 */
-void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, vector<double> &freq, reader_writer_lock &flow_lock, reader_writer_lock &wait_lock)
+void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, double &waiting, const vector<double> &freq, const vector<double> &arc_costs, reader_writer_lock *flow_lock, reader_writer_lock *wait_lock)
 {
 	/*
 	To explain a few technical details, the label setting algorithm involves updating a distance label for each node. In each iteration, we choose the unprocessed arc with the minimum value of its own cost plus its head's label. In order to speed up that search, we store all of those values in a min-priority queue. As with Dijkstra's algorithm, to get around the inability to update priorities, we just add extra copies to the queue whenever they are updated. We also store a master list of those values, which should always decrease as the algorithm moves forward, as a comparison every time we pop something out of the queue to ensure that we have the latest version.
@@ -93,14 +92,14 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, greater<arc_cost_pair>> arc_queue; // min-priority queue to quickly access the unprocessed arc with the minimum cost-plus-head-distance value
 	for (int i = 0; i < Net->stop_nodes[dest]->core_in.size(); i++)
 		// Set all non-infinite arc labels (which will include only the sink node's incoming arcs)
-		arc_queue.push(make_pair(Net->stop_nodes[dest]->core_in[i]->cost, Net->stop_nodes[dest]->core_in[i]->id));
+		arc_queue.push(make_pair(arc_costs[Net->stop_nodes[dest]->core_in[i]->id], Net->stop_nodes[dest]->core_in[i]->id));
 	unordered_set<int> attractive_arcs; // set of attractive arcs
 	priority_queue<arc_cost_pair, vector<arc_cost_pair>, less<arc_cost_pair>> load_queue; // max-priority queue to process attractive arcs in reverse order
 	stack<arc_cost_pair> nonzero_flows; // stack of flow increase/arc ID pairs for quickly processing only the nonzero updates
 
 	// Main label setting loop
 
-	while (unprocessed_arcs.empty() == false && arc_queue.empty() == false)
+	while ((unprocessed_arcs.empty() == false) && (arc_queue.empty() == false))
 	{
 		// Find the arc that minimizes the sum of its head's label and its own cost
 		chosen_label = arc_queue.top().first;
@@ -159,7 +158,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 			{
 				// Find arcs to update, recalculate labels, and push updates into priority queue
 				updated_arc = Net->core_nodes[chosen_tail]->core_in[i]->id;
-				updated_label = Net->core_arcs[updated_arc]->cost + node_label[chosen_tail];
+				updated_label = arc_costs[Net->core_arcs[updated_arc]->id] + node_label[chosen_tail];
 				arc_queue.push(make_pair(updated_label, updated_arc));
 			}
 		}
@@ -170,7 +169,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	for (auto a = attractive_arcs.begin(); a != attractive_arcs.end(); a++)
 	{
 		// Recalculate the cost-plus-head label for each attractive arc and place in a max-priority queue
-		load_queue.push(make_pair(node_label[Net->core_arcs[*a]->head->id] + Net->core_arcs[*a]->cost, *a));
+		load_queue.push(make_pair(node_label[Net->core_arcs[*a]->head->id] + arc_costs[Net->core_arcs[*a]->id], *a));
 	}
 
 	vector<double>().swap(node_label); // clear node label vector, which is no longer needed
@@ -212,7 +211,7 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		total_wait += node_wait[i];
 
 	// Process nonzero flow queue while reader/writer lock is engaged
-	flow_lock.lock();
+	flow_lock->lock();
 	while (nonzero_flows.empty() == false)
 	{
 		chosen_arc = nonzero_flows.top().second;
@@ -220,12 +219,12 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 		flows[chosen_arc] += added_flow; // apply nonzero flow increase from stack
 		nonzero_flows.pop();
 	}
-	flow_lock.unlock();
+	flow_lock->unlock();
 
 	// Increment total waiting time while reader/writer lock is engaged
-	wait_lock.lock();
+	wait_lock->lock();
 	waiting += total_wait;
-	wait_lock.unlock();
+	wait_lock->unlock();
 }
 
 /// Nonlinear assignment constructor reads in model data from file and sets network pointer.
@@ -266,10 +265,12 @@ NonlinearAssignment::NonlinearAssignment(string input_file, Network * net_in)
 			if (count == 1)
 				error_tol = stod(value);
 			if (count == 2)
+				change_tol = stod(value);
+			if (count == 3)
 				max_iterations = stoi(value);
-			if (count == 4)
-				conical_alpha = stod(value);
 			if (count == 5)
+				conical_alpha = stod(value);
+			if (count == 6)
 				conical_beta = stod(value);
 		}
 
@@ -294,22 +295,133 @@ The overall process being used here is the Frank-Wolfe algorithm, which iterativ
 */
 pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, pair<vector<double>, double> initial_sol)
 {
-	// Get initial solution
-	vector<double> flows = initial_sol.first;
-	double waiting = initial_sol.second;
+	// Initialize variables
+	pair<vector<double>, double> sol_next = initial_sol; // flow/waiting pair calculated as the linearized submodel solution
+	pair<vector<double>, double> sol_previous = initial_sol; // flow/waiting pair for the previous solution
+	vector<double> arc_costs(Net->core_arcs.size()); // arc costs based on current flow
+	int iteration = 0; // current iteration number
+	double error = INFINITY; // current solution error bound
+	double change = INFINITY; // maximum elementwise difference between consecutive solutions
 
-	////////////////////////////////////////////////////////////////
-	/////////////////////// For now, just directly call the nonlinear model.
-	////////////////////////////////////////////////////////////////
-	make_pair(flows, waiting) = Submodel->calculate(fleet);
+	// Calculate line arc capacities
+	vector<double> capacities(Net->core_arcs.size(), INFINITY);
+	for_each(Net->line_arcs.begin(), Net->line_arcs.end(), [&](Arc * a)
+	{
+		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
+	});
 
+	// Main Frank-Wolfe loop
 
+	cout << "\n========================================\n\n";
+	while ((iteration < max_iterations) && (error > error_tol) && (change > change_tol))
+	{
+		// Loop continues until achieving sufficiently low error or reaching an iteration cutoff
+		iteration++;
 
+		cout << "----------------------------------------" << endl;
+		cout << "Frank-Wolfe algorithm iteration " << iteration << endl << endl;
 
+		// Update all arc costs based on the current flow
+		for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
+		{
+			arc_costs[a->id] = arc_cost(a->id, sol_previous.first[a->id], capacities[a->id]);
+		});
 
+		// Solve constant-cost model for given cost vector
+		sol_next = Submodel->calculate(fleet, arc_costs);
 
+		// Calculate new error bound
+		error = obj_error(capacities, sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
+		cout << "Current error bound = " << error << endl;
 
+		cout << "lambda = " << 1 - (1.0 / iteration) << endl;
 
-	////////////////////////////
-	return make_pair(flows, waiting);
+		// Update solution as successive average of consecutive solutions and get maximum elementwise difference
+		change = solution_update(1 - (1.0 / iteration), sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
+		cout << "Maximum change = " << change << endl;
+	}
+
+	cout << "\n========================================\n";
+	cout << "Frank-Wolfe ended." << endl;
+	if (error <= error_tol)
+		cout << "Error bound achieved at " << error << endl;
+	if (change <= change_tol)
+		cout << "Change bound achieved at " << change << endl;
+	if ((error > error_tol) && (change > change_tol))
+		cout << "Iteration cutoff reached at " << iteration << " with error " << error << endl;
+
+	return sol_previous;
+}
+
+/**
+Calculates the nonlinear cost function for a given arc.
+
+Requires the arc ID, arc flow, and arc capacity.
+
+Returns the arc's cost according to the conical congestion function.
+*/
+double NonlinearAssignment::arc_cost(int id, double flow, double capacity)
+{
+	// Return infinite cost for zero-capacity arcs
+	if (capacity == 0)
+		return INFINITY;
+
+	// Return only the arc's base cost for infinite-capacity or zero-flow arcs
+	if ((capacity >= INFINITY) || (flow == 0))
+		return Net->core_arcs[id]->cost;
+
+	/*
+	Otherwise, evaluate the conical congestion function, which is defined as:
+		c(x) = c * (2 + sqrt((alpha * (1 - x/u))^2 + beta^2) - alpha * (1 - x/u) - beta)
+	where c(x) is the nonlinear cost, x is the arc's flow, c is the arc's base cost, u is the arc's capacity, and alpha and beta are parameters.
+	*/
+	double ratio = 1 - (flow / capacity);
+	return Net->core_arcs[id]->cost * (2 + sqrt(pow(conical_alpha*ratio, 2) + pow(conical_beta, 2)) - (conical_alpha * ratio) - conical_beta);
+}
+
+/**
+Calculates an error bound for the current objective value based on the difference between consecutive solutions.
+
+Requires references to the capacity vector, the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
+
+Returns an upper bound for the absolute error in the current solution.
+
+The Frank-Wolfe algorithm includes a means for bounding the absolute error of the current solution based on the objective values of the previous solutions. Since our algorithm never explicitly evaluates the objective value (only values of the linearized objective), we instead use a looser but more easily calculated bound that involves the difference between consecutive linearized objective values.
+*/
+double NonlinearAssignment::obj_error(const vector<double> &capacities, const vector<double> &flows_old, double waiting_old, const vector<double> &flows_new, double waiting_new)
+{
+	// Calculate error term-by-term
+	double total = waiting_old - waiting_new;
+	for (int i = 0; i < Net->core_arcs.size(); i++)
+		total += arc_cost(Net->core_arcs[i]->id, flows_old[i], capacities[i]) * (flows_old[i] - flows_new[i]);
+
+	return abs(total);
+}
+
+/**
+Updates the solution according to the convex combination found from the line search.
+
+Requires a value for the convex parameter, followed by references to the current flow vector, the current waiting time, the next flow vector, and the next waiting time, respectively.
+
+Returns the maximum elementwise difference between the current and updated solutions, and also updates the current solution in place as a convex combination of the two vectors.
+*/
+double NonlinearAssignment::solution_update(double lambda, vector<double> &flows_current, double &waiting_current, const vector<double> &flows_next, double waiting_next)
+{
+	double max_diff; // maximum elementwise difference
+	double element; // temporary variable for the updated element
+
+	// Update waiting time
+	element = lambda*waiting_current + (1 - lambda)*waiting_next;
+	max_diff = abs(waiting_current - element);
+	waiting_current = element;
+
+	// Update each flow variable
+	for (int i = 0; i < flows_current.size(); i++)
+	{
+		element = lambda*flows_current[i] + (1 - lambda)*flows_next[i];
+		max_diff = max(abs(flows_current[i] - element), max_diff);
+		flows_current[i] = element;
+	}
+
+	return max_diff;
 }

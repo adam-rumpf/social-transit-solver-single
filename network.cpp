@@ -1,4 +1,4 @@
-#include "network.h"
+#include "network.hpp"
 
 /**
 Network constructor to automatically build network from data files.
@@ -236,7 +236,7 @@ Network::Network(string node_file_name, string arc_file_name, string od_file_nam
 			}
 
 			// Add a very small cost to boarding and alighting arcs
-			if (arc_type == BOARDING_ARC || arc_type == ALIGHTING_ARC)
+			if ((arc_type == BOARDING_ARC) || (arc_type == ALIGHTING_ARC))
 				new_arc->cost += EPSILON;
 		}
 

@@ -4,18 +4,12 @@ Main driver of the initial objective/constraint evaluation.
 Contains the main function, which handles reading in the data, constructing the network, and calling the objective and constraint functions.
 */
 
-/*
-To Do:
--Implement keyboard stop.
--Implement email reports and attachments.
-*/
-
 #include <ctime>
 #include <iomanip>
 #include <iostream>
-#include "network.h"
-#include "objective.h"
-#include "constraints.h"
+#include "network.hpp"
+#include "objective.hpp"
+#include "constraints.hpp"
 
 // Define input file names
 #define NODE_FILE "data/node_data.txt"
@@ -32,14 +26,16 @@ To Do:
 // Define output file names
 #define METRIC_FILE "output/gravity_metrics.txt"
 #define SOLUTION_LOG_FILE "output/initial_solution_log.txt"
+#define FLOW_FILE "output/initial_flows.txt"
 
 using namespace std;
 
 // Function prototypes
 vector<int> read_fleets(string); // reads in initial fleet sizes
-void record_metrics(vector<double> &); // writes accessibility metrics to an output file
-void solution_log(vector<int> &, vector<double> &); // generates the initial row for the solution log given the solution vector and the element vector
-string solution_string(vector<int> &); // converts a solution vector to a string
+void record_metrics(const vector<double> &); // writes accessibility metrics to an output file
+void record_flows(Constraint *); // writes flow vector to an output file
+void solution_log(const vector<int> &, const vector<double> &); // generates the initial row for the solution log given the solution vector and the element vector
+string solution_string(const vector<int> &); // converts a solution vector to a string
 
 /// Main driver.
 int main()
@@ -58,7 +54,7 @@ int main()
 	Network * Net = new Network(NODE_FILE, ARC_FILE, OD_FILE, TRANSIT_FILE, VEHICLE_FILE, PROBLEM_FILE);
 
 	// Use Objective object to calculate initial objective value and accessibility metrics
-	/*Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
+	Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
 	
 	vector<double> metrics = Obj->all_metrics(fleets); // calculate all metrics
 	record_metrics(metrics); // write metrics to file
@@ -66,7 +62,7 @@ int main()
 	initial_objective = Obj->calculate(fleets); // calculate initial objective value
 	obj_time = (1.0*clock() - timer) / CLOCKS_PER_SEC;
 	cout << "\nObjective calculation took " << obj_time << " seconds." << endl;
-	cout << "Initial objective value: " << initial_objective << endl;*/
+	cout << "Initial objective value: " << initial_objective << endl;
 
 	// Use Constraint object to calculate initial constraint function values
 	Constraint * Con = new Constraint(USER_COST_FILE, OPERATOR_COST_FILE, ASSIGNMENT_FILE, Net);
@@ -76,9 +72,14 @@ int main()
 	con_time = (1.0*clock() - timer) / CLOCKS_PER_SEC;
 	cout << "\nConstraint calculation took " << con_time << " seconds." << endl;
 	cout << "Initial user cost terms: ";
+	double tot = 0.0;
 	for (int i = 0; i < initial_user_costs.size(); i++)
+	{
+		tot += initial_user_costs[i];
 		cout << initial_user_costs[i] << ' ';
+	}
 	cout << endl;
+	cout << "Total: " << tot << endl;
 
 	// Assemble solution log row
 	for (int i = 0; i < initial_user_costs.size(); i++)
@@ -89,6 +90,9 @@ int main()
 
 	// Write solution log row to file
 	solution_log(fleets, solution_log_row);
+
+	// Write flows to file
+	record_flows(Con);
 	
 	cin.get();////////////////////////// Remove later.
 
@@ -146,7 +150,7 @@ vector<int> read_fleets(string transit_file_name)
 }
 
 /// Records vector of accessibility metrics to an output file.
-void record_metrics(vector<double> &metrics)
+void record_metrics(const vector<double> &metrics)
 {
 	ofstream out_file(METRIC_FILE);
 
@@ -162,13 +166,37 @@ void record_metrics(vector<double> &metrics)
 			out_file << i + 1 << '\t' << metrics[i] << endl;
 
 		out_file.close();
+		cout << "Successfuly recorded metrics!" << endl;
 	}
 	else
 		cout << "Metric file failed to open." << endl;
 }
 
+/// Records vector of core arc flows to an output file. Requires a reference to the Constraint object, which contains a flow vector.
+void record_flows(Constraint * Con)
+{
+	ofstream out_file(FLOW_FILE);
+
+	if (out_file.is_open())
+	{
+		cout << "Writing flows to output file..." << endl;
+
+		// Write comment line
+		out_file << "ID\tFlow" << fixed << setprecision(15) << endl;
+
+		// Write all flows
+		for (int i = 0; i < Con->Net->core_arcs.size(); i++)
+			out_file << Con->Net->core_arcs[i]->id << '\t' << Con->sol_pair.first[i] << endl;
+
+		out_file.close();
+		cout << "Successfully recorded flows!" << endl;
+	}
+	else
+		cout << "Flow file failed to open." << endl;
+}
+
 /// Records the initial row of the solution log.
-void solution_log(vector<int> &sol, vector<double> &row)
+void solution_log(const vector<int> &sol, const vector<double> &row)
 {
 	ofstream log_file(SOLUTION_LOG_FILE);
 
@@ -194,7 +222,7 @@ void solution_log(vector<int> &sol, vector<double> &row)
 }
 
 /// Converts a solution vector to a string by simply concatenating its digits separated by underscores.
-string solution_string(vector<int> &sol)
+string solution_string(const vector<int> &sol)
 {
 	string out = "";
 

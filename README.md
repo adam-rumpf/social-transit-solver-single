@@ -12,6 +12,7 @@ This program writes output files to a local `output/` folder. The following file
 
 * `gravity_metrics.txt`: A full listing of the gravity access metrics of all population centers for the initial solution vector. This is meant for comparing the initial and final results on a center-by-center basis.
 * `initial_solution_log.txt`: An initial version of the solution log file for the main solver. Formatted correctly for the main solver, and contains a single row which logs the initial solution along with its constriant and objective values.
+* `initial_flows.txt`: The flow vector produced by the nonlinear assignment model for the initial fleet size vector. Includes core arcs only.
 
 ## Data Folder
 
@@ -60,8 +61,9 @@ Information related to the Spiess and Florian assignment model.
 
 Contains the following rows:
 
-* `Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
-* `Cutoff`: Iteration cutoff for the Frank-Wolfe algorithm.
+* `FW_Error_Epsilon`: Optimality gap threshold to use for ending the Frank-Wolfe algorithm.
+* `FW_Change_Epsilon`: Solution change threshold (inf-norm) to use for ending the Frank-Wolfe algorithm.
+* `FW_Cutoff`: Iteration cutoff for the Frank-Wolfe algorithm.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `2`.
 * `alpha`: Alpha parameter of the conical congestion function.
 * `beta`: Beta parameter of the conical congestion function. By definition it should equal `(2 alpha - 1)/(2 alpha - 2)`, and is included here only for convenience.

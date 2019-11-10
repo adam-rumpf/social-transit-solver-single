@@ -16,7 +16,10 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 #include <utility>
 #include <unordered_set>
 #include <vector>
-#include "network.h"
+#include "network.hpp"
+
+// Other technical definitions
+#define EPSILON 0.000001 // very small positive value
 
 using namespace std;
 using namespace concurrency;
@@ -38,12 +41,12 @@ struct ConstantAssignment
 
 	// Public methods
 	ConstantAssignment(Network *); // constructor sets network pointer
-	pair<vector<double>, double> calculate(vector<int> &); // calculates flow vector for a given fleet vector
-	void flows_to_destination(int, vector<double> &, double &, vector<double> &, reader_writer_lock &, reader_writer_lock &); // calculates flow vector and waiting time for a single given sink
+	pair<vector<double>, double> calculate(const vector<int> &, const vector<double> &); // calculates flow vector for a given fleet vector and arc cost vector
+	void flows_to_destination(int, vector<double> &, double &, const vector<double> &, const vector<double> &, reader_writer_lock *, reader_writer_lock *); // calculates flow vector and waiting time for a single given sink
 };
 
 /**
-Nonlinear cost assignment model cost.
+Nonlinear cost assignment model class.
 
 Includes a variety of attributes and methods for evaluating the nonlinear cost version of the Spiess and Florian model.
 
@@ -55,6 +58,7 @@ struct NonlinearAssignment
 	Network * Net; // pointer to network object
 	ConstantAssignment * Submodel; // pointer to constant-cost submodel
 	double error_tol; // error bound cutoff for Frank-Wolfe
+	double change_tol; // solution vector change cutoff for Frank-Wolfe
 	int max_iterations; // iteration cutoff for Frank-Wolfe
 	double conical_alpha; // alpha parameter for conical congestion function
 	double conical_beta; // beta parameter for conical congestion function
@@ -62,4 +66,7 @@ struct NonlinearAssignment
 	// Public methods
 	NonlinearAssignment(string, Network *); // constructor reads assignment model data file and sets network pointer
 	pair<vector<double>, double> calculate(vector<int> &, pair<vector<double>, double>); // calculates flow vector for a given fleet vector and initial assignment model solution
+	double arc_cost(int, double, double); // calculates the nonlinear cost function for a given arc
+	double obj_error(const vector<double> &, const vector<double> &, double, const vector<double> &, double); // calculates an error bound for the current objective value
+	double solution_update(double, vector<double> &, double &, const vector<double> &, double); // updates current solution as a convex combination of the previous and next solutions, and outputs the maximum elementwise difference
 };
