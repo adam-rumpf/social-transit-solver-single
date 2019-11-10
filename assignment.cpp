@@ -302,7 +302,6 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	int iteration = 0; // current iteration number
 	double error = INFINITY; // current solution error bound
 	double change = INFINITY; // maximum elementwise difference between consecutive solutions
-	double lambda; // convex parameter from line search
 
 	// Calculate line arc capacities
 	vector<double> capacities(Net->core_arcs.size(), INFINITY);
@@ -310,16 +309,6 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	{
 		capacities[a->id] = Net->lines[a->line]->capacity(fleet[a->line]);
 	});
-
-	////////////////////////////////////
-	/*cout << "Initial flows:" << endl;
-	for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
-		cout << sol_previous.first[i] << endl;*/
-
-	////////////////////////////////////
-	/*cout << "Base arc costs:" << endl;
-	for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
-		cout << Net->core_arcs[i]->cost << endl;*/
 
 	// Main Frank-Wolfe loop
 
@@ -338,15 +327,8 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 			arc_costs[a->id] = arc_cost(a->id, sol_previous.first[a->id], capacities[a->id]);
 		});
 
-		////////////////////////////////////
-		/*cout << "Current arc costs:" << endl;
-		for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
-			cout << arc_costs[i] << " (" << Net->core_arcs[i]->cost << ')' << endl;
-		cout << endl;*/
-
 		// Solve constant-cost model for given cost vector
 		sol_next = Submodel->calculate(fleet, arc_costs);
-		cout << endl;///////////////////////////////////////////////////
 
 		// Calculate new error bound
 		error = obj_error(capacities, sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
@@ -357,12 +339,6 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		// Update solution as successive average of consecutive solutions and get maximum elementwise difference
 		change = solution_update(1 - (1.0 / iteration), sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
 		cout << "Maximum change = " << change << endl;
-
-		////////////////////////////////////
-		/*cout << "\nCurrent flows:" << endl;
-		for (int i = 0; i < min(20, (int)Net->core_arcs.size()); i++)
-			cout << sol_previous.first[i] << endl;
-		cout << endl;///////////////////////*/
 	}
 
 	cout << "\n========================================\n";
@@ -374,7 +350,6 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 	if ((error > error_tol) && (change > change_tol))
 		cout << "Iteration cutoff reached at " << iteration << " with error " << error << endl;
 
-	////////////////////////////
 	return sol_previous;
 }
 

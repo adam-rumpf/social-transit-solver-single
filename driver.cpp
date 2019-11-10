@@ -54,7 +54,7 @@ int main()
 	Network * Net = new Network(NODE_FILE, ARC_FILE, OD_FILE, TRANSIT_FILE, VEHICLE_FILE, PROBLEM_FILE);
 
 	// Use Objective object to calculate initial objective value and accessibility metrics
-	/*Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
+	Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
 	
 	vector<double> metrics = Obj->all_metrics(fleets); // calculate all metrics
 	record_metrics(metrics); // write metrics to file
@@ -62,7 +62,7 @@ int main()
 	initial_objective = Obj->calculate(fleets); // calculate initial objective value
 	obj_time = (1.0*clock() - timer) / CLOCKS_PER_SEC;
 	cout << "\nObjective calculation took " << obj_time << " seconds." << endl;
-	cout << "Initial objective value: " << initial_objective << endl;*/
+	cout << "Initial objective value: " << initial_objective << endl;
 
 	// Use Constraint object to calculate initial constraint function values
 	Constraint * Con = new Constraint(USER_COST_FILE, OPERATOR_COST_FILE, ASSIGNMENT_FILE, Net);
