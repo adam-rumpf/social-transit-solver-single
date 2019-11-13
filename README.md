@@ -140,6 +140,7 @@ Information related to defining the user cost function.
 Contains the following rows:
 
 * `Initial`: User cost of the initial solution. Used for defining the allowable relative increase bounds. The value here does not matter since it will be filled in by the single-run model.
+* `Percent`: Allowable percentage increase in user cost (expressed as a decimal). Used to define the feasible set in the main solver. No effect on this preprocessing program.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `3`.
 * `Riding`: Weight of in-vehicle riding time.
 * `Walking`: Weight of walking time.
