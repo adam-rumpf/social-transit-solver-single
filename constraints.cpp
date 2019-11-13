@@ -3,9 +3,9 @@
 /**
 Constraint object constructor that loads constraint file input and sets a network object pointer.
 
-Requires the names of the user cost file, operator cost file, assignment model file, and a network object pointer.
+Requires the names of the user cost file, assignment model file, and a network object pointer.
 */
-Constraint::Constraint(string us_file_name, string op_file_name, string assignment_file_name, Network * net_in)
+Constraint::Constraint(string us_file_name, string assignment_file_name, Network * net_in)
 {
 	Net = net_in;
 	stop_size = Net->stop_nodes.size();

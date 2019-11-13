@@ -13,6 +13,7 @@ This program writes output files to a local `output/` folder. The following file
 * `gravity_metrics.txt`: A full listing of the gravity access metrics of all population centers for the initial solution vector. This is meant for comparing the initial and final results on a center-by-center basis.
 * `initial_solution_log.txt`: An initial version of the solution log file for the main solver. Formatted correctly for the main solver, and contains a single row which logs the initial solution along with its constriant and objective values.
 * `initial_flows.txt`: The flow vector produced by the nonlinear assignment model for the initial fleet size vector. Includes core arcs only.
+* `user_cost_data.txt`: A copy of the `user_cost_data.txt` input file with the initial user cost filled in based on the results of the single run.
 
 ## Data Folder
 
@@ -23,7 +24,6 @@ This program reads input files from a local `data/` folder. The following data f
 * [`node_data.txt`](#node_datatxt)
 * [`objective_data.txt`](#objective_datatxt)
 * [`od_data.txt`](#od_datatxt)
-* [`operator_cost_data.txt`](#operator_cost_datatxt)
 * [`problem_data.txt`](#problem_datatxt)
 * [`transit_data.txt`](#transit_datatxt)
 * [`user_cost_data.txt`](#user_cost_datatxt)
@@ -106,17 +106,6 @@ Contains the following columns:
 * `Destination`: Node ID of destination.
 * `Volume`: Number of people wishing to travel from the origin to the destination.
 
-### `operator_cost_data.txt`
-
-Information related to defining the operator cost function.
-
-Contains the following rows:
-
-* `Initial`: Operator cost of the initial solution. Used for defining the allowable relative increase bounds. Note that this is not calculated automatically during preprocessing, and must be filled in by hand by using the single-run model.
-* `Elements`: Number of parameters listed on the following rows. Currently set to `2`.
-* `Operating_Cost`: Weight of the vehicle operating costs.
-* `Fares`: Fare collected from each boarding.
-
 ### `problem_data.txt`
 
 Miscellaneous data required to define the problem.
@@ -150,7 +139,7 @@ Information related to defining the user cost function.
 
 Contains the following rows:
 
-* `Initial`: User cost of the initial solution. Used for defining the allowable relative increase bounds. Note that this is not calculated automatically during preprocessing, and must be filled in by hand by using the single-run model.
+* `Initial`: User cost of the initial solution. Used for defining the allowable relative increase bounds. The value here does not matter since it will be filled in by the single-run model.
 * `Elements`: Number of parameters listed on the following rows. Currently set to `3`.
 * `Riding`: Weight of in-vehicle riding time.
 * `Walking`: Weight of walking time.
