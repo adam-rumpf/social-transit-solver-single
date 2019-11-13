@@ -7,6 +7,7 @@ Contains the main function, which handles reading in the data, constructing the 
 #include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <string>
 #include "network.hpp"
 #include "objective.hpp"
 #include "constraints.hpp"
@@ -20,13 +21,13 @@ Contains the main function, which handles reading in the data, constructing the 
 #define OBJECTIVE_FILE "data/objective_data.txt"
 #define PROBLEM_FILE "data/problem_data.txt"
 #define USER_COST_FILE "data/user_cost_data.txt"
-#define OPERATOR_COST_FILE "data/operator_cost_data.txt"
 #define ASSIGNMENT_FILE "data/assignment_data.txt"
 
 // Define output file names
 #define METRIC_FILE "output/gravity_metrics.txt"
 #define SOLUTION_LOG_FILE "output/initial_solution_log.txt"
 #define FLOW_FILE "output/initial_flows.txt"
+#define USER_COST_FILE_OUT "output/user_cost_data.txt"
 
 using namespace std;
 
@@ -35,6 +36,7 @@ vector<int> read_fleets(string); // reads in initial fleet sizes
 void record_metrics(const vector<double> &); // writes accessibility metrics to an output file
 void record_flows(Constraint *); // writes flow vector to an output file
 void solution_log(const vector<int> &, const vector<double> &); // generates the initial row for the solution log given the solution vector and the element vector
+void user_cost_file(string, string, double); // generates a copy of the given user cost file with the newly-calculated initial cost filled in
 string solution_string(const vector<int> &); // converts a solution vector to a string
 
 /// Main driver.
@@ -65,7 +67,7 @@ int main()
 	cout << "Initial objective value: " << initial_objective << endl;
 
 	// Use Constraint object to calculate initial constraint function values
-	Constraint * Con = new Constraint(USER_COST_FILE, OPERATOR_COST_FILE, ASSIGNMENT_FILE, Net);
+	Constraint * Con = new Constraint(USER_COST_FILE, ASSIGNMENT_FILE, Net);
 
 	timer = clock();
 	initial_user_costs = Con->calculate(fleets).second; // calculate initial user costs
@@ -93,8 +95,9 @@ int main()
 
 	// Write flows to file
 	record_flows(Con);
-	
-	cin.get();////////////////////////// Remove later.
+
+	// Write updated user cost file
+	user_cost_file(USER_COST_FILE, USER_COST_FILE_OUT, tot);
 
 	return 0;
 }
@@ -214,11 +217,60 @@ void solution_log(const vector<int> &sol, const vector<double> &row)
 		log_file << endl;
 
 		log_file.close();
+		cout << "Successfully recorded solution!" << endl;
 	}
 	else
 		cout << "Solution log file failed to open." << endl;
+}
 
-	cout << "Successfully recorded solution!" << endl;
+/**
+Generates a copy of the user cost input file with a new value for the initial user cost.
+
+Requires the name of the input file, the output file, and a new value, respectively.
+*/
+void user_cost_file(string input_file_name, string output_file_name, double val)
+{
+	// Read input file while writing to output file
+	cout << "Creating updated copy of user cost file..." << endl;
+	ifstream in_file;
+	ofstream out_file(output_file_name);
+	in_file.open(input_file_name);
+	if (in_file.is_open() && out_file.is_open())
+	{
+		out_file << fixed << setprecision(15);
+
+		string line, piece; // whole line and line element being read
+		int count = 0; // line number
+
+		while (in_file.eof() == false)
+		{
+			count++;
+
+			// Get whole line as a string stream
+			getline(in_file, line);
+			if (line.size() == 0)
+				// Break for blank line at file end
+				break;
+			stringstream stream(line);
+
+			// Read pieces of each line
+			getline(stream, piece, '\t'); // left column
+			out_file << piece << '\t';
+			getline(stream, piece, '\t'); // right column
+			if (count == 2)
+				// Replace the original user cost value
+				out_file << val << endl;
+			else
+				// Otherwise directly copy the value
+				out_file << piece << endl;
+		}
+
+		in_file.close();
+		out_file.close();
+		cout << "Successfully copied user cost file!" << endl;
+	}
+	else
+		cout << "User cost file failed to load." << endl;
 }
 
 /// Converts a solution vector to a string by simply concatenating its digits separated by underscores.
