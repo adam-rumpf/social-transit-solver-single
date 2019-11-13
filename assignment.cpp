@@ -318,8 +318,8 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		// Loop continues until achieving sufficiently low error or reaching an iteration cutoff
 		iteration++;
 
-		cout << "----------------------------------------" << endl;
-		cout << "Frank-Wolfe algorithm iteration " << iteration << endl << endl;
+		cout << "\n----------------------------------------" << endl;
+		cout << "Frank-Wolfe algorithm iteration " << iteration << " (of max " << max_iterations << ')' << endl << endl;
 
 		// Update all arc costs based on the current flow
 		for_each(Net->core_arcs.begin(), Net->core_arcs.end(), [&](Arc * a)
