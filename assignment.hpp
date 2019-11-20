@@ -7,6 +7,7 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 #pragma once
 
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stack>
@@ -57,6 +58,7 @@ struct NonlinearAssignment
 	// Public attributes
 	Network * Net; // pointer to network object
 	ConstantAssignment * Submodel; // pointer to constant-cost submodel
+	string flow_file; // name of initial flow vector file
 	double error_tol; // error bound cutoff for Frank-Wolfe
 	double flow_tol; // flow vector change cutoff for Frank-Wolfe
 	double waiting_tol; // waiting time change cutoff for Frank-Wolfe
@@ -65,9 +67,10 @@ struct NonlinearAssignment
 	double conical_beta; // beta parameter for conical congestion function
 
 	// Public methods
-	NonlinearAssignment(string, Network *); // constructor reads assignment model data file and sets network pointer
+	NonlinearAssignment(string, string, Network *); // constructor reads assignment model data file and sets network pointer
 	pair<vector<double>, double> calculate(vector<int> &, pair<vector<double>, double>); // calculates flow vector for a given fleet vector and initial assignment model solution
 	double arc_cost(int, double, double); // calculates the nonlinear cost function for a given arc
 	double obj_error(const vector<double> &, const vector<double> &, double, const vector<double> &, double); // calculates an error bound for the current objective value
 	pair<double, double> solution_update(double, vector<double> &, double &, const vector<double> &, double); // updates current solution as a convex combination of the previous and next solutions, and outputs the maximum elementwise difference
+	void record_flows(const vector<double> &); // records the flow vector for each iteration of the Frank-Wolfe algorithm
 };

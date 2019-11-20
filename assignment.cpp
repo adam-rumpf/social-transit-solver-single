@@ -227,10 +227,11 @@ void ConstantAssignment::flows_to_destination(int dest, vector<double> &flows, d
 	wait_lock->unlock();
 }
 
-/// Nonlinear assignment constructor reads in model data from file and sets network pointer.
-NonlinearAssignment::NonlinearAssignment(string input_file, Network * net_in)
+/// Nonlinear assignment constructor reads in model data from file and sets flow file name and network pointer.
+NonlinearAssignment::NonlinearAssignment(string input_file, string flow_file_name, Network * net_in)
 {
 	Net = net_in;
+	flow_file = flow_file_name;
 
 	// Initialize submodel object
 	Submodel = new ConstantAssignment(net_in);
@@ -342,6 +343,9 @@ pair<vector<double>, double> NonlinearAssignment::calculate(vector<int> &fleet, 
 		change = solution_update(1 - (1.0 / iteration), sol_previous.first, sol_previous.second, sol_next.first, sol_next.second);
 		cout << "Maximum flow change = " << change.first << endl;
 		cout << "Waiting change = " << change.second << endl;
+
+		// Output current flows
+		record_flows(sol_previous.first);
 	}
 
 	cout << "\n========================================\n";
@@ -430,4 +434,25 @@ pair<double, double> NonlinearAssignment::solution_update(double lambda, vector<
 	}
 
 	return make_pair(max_flow_diff, waiting_diff);
+}
+
+/// Records a given flow vector to the flow output file
+void NonlinearAssignment::record_flows(const vector<double> &flows)
+{
+	ofstream out_file(flow_file);
+
+	if (out_file.is_open())
+	{
+		cout << "Writing flows to output file..." << endl;
+
+		// Write comment line
+		out_file << "ID\tFlow" << fixed << setprecision(15) << endl;
+
+		// Write all flows
+		for (int i = 0; i < Net->core_arcs.size(); i++)
+			out_file << Net->core_arcs[i]->id << '\t' << flows[i] << endl;
+
+		out_file.close();
+		cout << "Successfully recorded flows!" << endl;
+	}
 }

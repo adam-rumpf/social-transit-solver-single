@@ -3,16 +3,51 @@
 /**
 Constraint object constructor that loads constraint file input and sets a network object pointer.
 
-Requires the names of the user cost file, assignment model file, and a network object pointer.
+Requires the names of the user cost file, assignment model file, initial flow file, and a network object pointer.
+
+If the initial flow file can be successfuly read, this becomes the initial flow vector. If not, we default to the zero flow vector.
 */
-Constraint::Constraint(string us_file_name, string assignment_file_name, Network * net_in)
+Constraint::Constraint(string us_file_name, string assignment_file_name, string flow_file_name, Network * net_in)
 {
 	Net = net_in;
 	stop_size = Net->stop_nodes.size();
 	sol_pair.first.resize(Net->core_arcs.size(), 0.0);
 
+	// Attempt to read flow file
+	cout << "Attempting to read initial flows..." << endl;
+	ifstream fl_file;
+	fl_file.open(flow_file_name);
+	if (fl_file.is_open())
+	{
+		string line, piece; // whole line and line element being read
+		getline(fl_file, line); // skip comment line
+
+		while (fl_file.eof() == false)
+		{
+			// Get whole line as a string stream
+			getline(fl_file, line);
+			if (line.size() == 0)
+				// Break for blank line at file end
+				break;
+			stringstream stream(line);
+
+			// Go through each piece of the line
+			getline(stream, piece, '\t'); // ID
+			int id = stoi(piece);
+			if (id >= sol_pair.first.size())
+				break;
+			getline(stream, piece, '\t'); // Flow
+			sol_pair.first[id] = stod(piece);
+		}
+
+		fl_file.close();
+		cout << "Successfully read flows!" << endl;
+	}
+	else
+		cout << "Flow file failed to open. Defaulting to zero initial flow." << endl;
+
 	// Initialize assignment model object
-	Assignment = new NonlinearAssignment(assignment_file_name, net_in);
+	Assignment = new NonlinearAssignment(assignment_file_name, flow_file_name, net_in);
 
 	// Read constraint data
 	cout << "Reading user cost data..." << endl;
