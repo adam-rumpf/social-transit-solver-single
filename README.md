@@ -4,6 +4,8 @@ A solution algorithm initialization program for use in a research project of min
 
 The main purpose of this program is to calculate the constraint and objective values of the initial solution vector for use in the main solver's search algorithm, as well as a few additional metrics for use in comparing the initial network to the final network. The network, objective, and constraint modules included in this program should be identical to those used in the main solver.
 
+Note that this program may take an extremely long time to run for large problem instances. It can be terminated early by pressing `[Ctrl]+[C]` during its execution. Note that this discards all progress except for files which have already been written. The assignment model outputs an updated copy of its flow values during each iteration of its main loop, allowing some progress to be saved between runs.
+
 I would not expect this program to be of much use to anyone outside of our research group, but it is provided here for anyone interested.
 
 ## Output Folder
@@ -12,7 +14,7 @@ This program writes output files to a local `output/` folder. The following file
 
 * `gravity_metrics.txt`: A full listing of the gravity access metrics of all population centers for the initial solution vector. This is meant for comparing the initial and final results on a center-by-center basis.
 * `initial_solution_log.txt`: An initial version of the solution log file for the main solver. Formatted correctly for the main solver, and contains a single row which logs the initial solution along with its constriant and objective values.
-* `initial_flows.txt`: The flow vector produced by the nonlinear assignment model for the initial fleet size vector. Includes core arcs only.
+* `initial_flows.txt`: The flow vector produced by the nonlinear assignment model for the initial fleet size vector. Includes core arcs only. This file is also used to allow the assignment process to be halted (using `[Ctrl]+[C]`) and resumed. If present it is used as an initial flow vector to speed up the assignment model. It is updated during each iteration of the assignment model's Frank-Wolfe algorithm.
 * `user_cost_data.txt`: A copy of the `user_cost_data.txt` input file with the initial user cost filled in based on the results of the single run.
 
 ## Data Folder

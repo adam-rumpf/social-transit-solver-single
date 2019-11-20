@@ -37,7 +37,7 @@ pair<vector<double>, double> ConstantAssignment::calculate(const vector<int> &fl
 	vector<double> flows(Net->core_arcs.size(), 0.0); // total flow vector over all destinations
 	double waiting = 0.0; // total waiting time over all destinations
 	cout << "Solving single-sink models in parallel:\n|";
-	/*for (int i = 0; i < stop_size; i++)
+	for (int i = 0; i < stop_size; i++)
 		cout << '-'; // length of "progress bar"
 	cout << "|\n|";
 	parallel_for_each(Net->stop_nodes.begin(), Net->stop_nodes.end(), [&](Node * s)
@@ -45,15 +45,6 @@ pair<vector<double>, double> ConstantAssignment::calculate(const vector<int> &fl
 		cout << '*'; // shows progress
 		flows_to_destination(s->id, flows, waiting, freq, arc_costs, &flow_lock, &wait_lock);
 	});
-	cout << '|' << endl;*/
-	for (int i = 0; i < 5; i++)
-		cout << '-';
-	cout << "|\n|";
-	for (int i = 0; i < 5; i++)
-	{
-		cout << '*';
-		flows_to_destination(Net->stop_nodes[i]->id, flows, waiting, freq, arc_costs, &flow_lock, &wait_lock);
-	}
 	cout << '|' << endl;
 
 	return make_pair(flows, waiting);

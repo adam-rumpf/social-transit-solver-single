@@ -4,6 +4,7 @@ Main driver of the initial objective/constraint evaluation.
 Contains the main function, which handles reading in the data, constructing the network, and calling the objective and constraint functions.
 */
 
+#include <csignal>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -32,6 +33,7 @@ Contains the main function, which handles reading in the data, constructing the 
 using namespace std;
 
 // Function prototypes
+void STOP_REQUEST(int); // used to halt the program
 vector<int> read_fleets(string); // reads in initial fleet sizes
 void record_metrics(const vector<double> &); // writes accessibility metrics to an output file
 void record_flows(Constraint *); // writes flow vector to an output file
@@ -42,6 +44,9 @@ string solution_string(const vector<int> &); // converts a solution vector to a 
 /// Main driver.
 int main()
 {
+	// Register signal handler for stop request
+	signal(SIGINT, STOP_REQUEST);
+
 	clock_t timer; // timer object used to time constraint and objective calculations
 	double obj_time = -1; // time required to calculate objective
 	double initial_objective = -1; // initial objective value
@@ -56,7 +61,7 @@ int main()
 	Network * Net = new Network(NODE_FILE, ARC_FILE, OD_FILE, TRANSIT_FILE, VEHICLE_FILE, PROBLEM_FILE);
 
 	// Use Objective object to calculate initial objective value and accessibility metrics
-	/*Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
+	Objective * Obj = new Objective(OBJECTIVE_FILE, Net);
 	
 	vector<double> metrics = Obj->all_metrics(fleets); // calculate all metrics
 	record_metrics(metrics); // write metrics to file
@@ -64,7 +69,7 @@ int main()
 	initial_objective = Obj->calculate(fleets); // calculate initial objective value
 	obj_time = (1.0*clock() - timer) / CLOCKS_PER_SEC;
 	cout << "\nObjective calculation took " << obj_time << " seconds." << endl;
-	cout << "Initial objective value: " << initial_objective << endl;*/
+	cout << "Initial objective value: " << initial_objective << endl;
 
 	// Use Constraint object to calculate initial constraint function values
 	Constraint * Con = new Constraint(USER_COST_FILE, ASSIGNMENT_FILE, FLOW_FILE, Net);
@@ -100,6 +105,12 @@ int main()
 	user_cost_file(USER_COST_FILE, USER_COST_FILE_OUT, tot);
 
 	return 0;
+}
+
+/// Signal handler for stop request. Exits program if the user presses [Ctrl]+[C].
+void STOP_REQUEST(int signum)
+{
+	exit(1);
 }
 
 /// Reads in initial fleet sizes from transit data file and returns them as a vector.
