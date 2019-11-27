@@ -21,6 +21,7 @@ Solves the Spiess and Florian model to return the user flows based on a given so
 
 // Other technical definitions
 #define EPSILON 0.000001 // very small positive value
+#define LARGE 10e20 // very large positive value
 
 using namespace std;
 using namespace concurrency;
