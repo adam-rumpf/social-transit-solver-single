@@ -1,6 +1,6 @@
 # social-transit-solver-single
 
-A solution algorithm initialization program for use in a research project of mine dealing with a public transit design model with social access objectives. This produces the initial objective and constraint function values and is not part of the main solution search loop.
+A solution algorithm initialization program for use in a research project of mine dealing with a public transit design model with social access objectives (see project home page [here](https://github.com/adam-rumpf/social-transit)). This produces the initial objective and constraint function values and is not part of the main solution search loop.
 
 The main purpose of this program is to calculate the constraint and objective values of the initial solution vector for use in the main solver's search algorithm, as well as a few additional metrics for use in comparing the initial network to the final network. The network, objective, and constraint modules included in this program should be identical to those used in the main solver.
 
